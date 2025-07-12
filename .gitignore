@@ -1,1 +1,100 @@
+# =============================================================================
+# Project Plannning
+# =============================================================================
 planning/
+
+
+# =============================================================================
+# IDE & Editor Files
+# =============================================================================
+# Ignore all VS Code files except for shared settings
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# =============================================================================
+# Operating System Files
+# =============================================================================
+.DS_Store
+Thumbs.db
+._*
+__MACOSX
+
+# =============================================================================
+# Log files
+# =============================================================================
+*.log
+*.log.*
+
+# =============================================================================
+# Environment Variables
+# =============================================================================
+# Ignore all .env files but keep the example and test templates
+.env
+.env.*
+!.env.example
+!.env.test
+
+# =============================================================================
+# Python / Backend
+# =============================================================================
+# Database
+/backend/cointainr.db
+
+# Virtual Environment
+/backend/.venv/
+
+# Cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+*.egg-info/
+
+# Unit test / coverage reports
+.pytest_cache
+.coverage
+
+# =============================================================================
+# Node / Frontend
+# =============================================================================
+# Dependencies
+/frontend/node_modules/
+
+# SvelteKit build artifacts and caches
+/frontend/.svelte-kit/
+/frontend/.vite/
+
+# Build outputs
+/frontend/build/
+/frontend/.output/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vite temporary files
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# =============================================================================
+# Testing
+# =============================================================================
+# Playwright
+/frontend/test-results/
+/frontend/playwright-report/
+
+# =============================================================================
+# Deployment
+# =============================================================================
+.vercel
+.netlify
+.wrangler
+
+# =============================================================================
+# Project-Specific
+# =============================================================================

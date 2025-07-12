@@ -1,0 +1,13 @@
+@import 'tailwindcss';
+
+@theme {
+	--color-primary: #00c896;
+	--color-background: #1e1e2f;
+	--color-surface: #2a2f45;
+	--color-text-light: #f0f4f8;
+	--color-profit: #2ecc71;
+	--color-loss: #e74c3c;
+	--color-gold: #d4af37;
+
+	--font-headline: 'Space Grotesk', system-ui, sans-serif;
+}
