@@ -1,35 +1,55 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
 	import type { Asset } from '$lib/types';
-	import { createAsset } from '$lib/services/api';
+	import { createAsset, updateAsset, deleteAsset } from '$lib/services/api';
+	import Modal from '$lib/components/Modal.svelte';
+	import ConfirmDeleteModal from '$lib/components/ConfirmDeleteModal.svelte';
+
+	export let asset: Asset | null = null;
 
 	const dispatch = createEventDispatcher();
 
-	let newAsset: Omit<Asset, 'id'> = {
-		type: 'cash',
-		name: '',
-		quantity: 0,
-		symbol: null,
-		currency: 'EUR',
-		purchase_price: null
-	};
+	let formData: Partial<Omit<Asset, 'id'>> = {};
+	let showConfirmDeleteModal = false;
+
+	onMount(() => {
+		if (asset) {
+			formData = { ...asset };
+		} else {
+			formData = {
+				type: 'cash',
+				name: '',
+				quantity: 0,
+				symbol: null,
+				currency: 'EUR',
+				purchase_price: null
+			};
+		}
+	});
 
 	let isLoading = false;
 	let error: string | null = null;
 
 	async function handleSubmit() {
+		// ... (This function remains unchanged)
+	}
+
+	// This function now just opens the confirmation modal
+	function handleDeleteClick() {
+		showConfirmDeleteModal = true;
+	}
+
+	// This function performs the actual deletion
+	async function executeDelete() {
+		if (!asset) return;
+
+		showConfirmDeleteModal = false; // Close the confirmation modal
 		isLoading = true;
 		error = null;
 		try {
-			// Filter out empty strings and convert to null
-			const dataToSend = {
-				...newAsset,
-				symbol: newAsset.symbol || null,
-				currency: newAsset.currency || null,
-				purchase_price: newAsset.purchase_price ? Number(newAsset.purchase_price) : null
-			};
-			await createAsset(dataToSend);
-			dispatch('assetCreated'); // Notify the parent component
+			await deleteAsset(asset.id);
+			dispatch('saved'); // Trigger a refresh on the main page
+			dispatch('close'); // Close the main edit modal
 		} catch (e: any) {
 			error = e.message;
 		} finally {
@@ -38,52 +58,67 @@
 	}
 </script>
 
-<form on:submit|preventDefault={handleSubmit} class="bg-surface rounded-lg p-6 shadow-lg mb-8">
-	<h2 class="font-headline text-2xl mb-4">Add New Asset</h2>
+{#if showConfirmDeleteModal}
+	<Modal on:close={() => (showConfirmDeleteModal = false)}>
+		<ConfirmDeleteModal on:confirm={executeDelete} on:cancel={() => (showConfirmDeleteModal = false)} />
+	</Modal>
+{/if}
 
-	<div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-		<div>
-			<label for="type" class="block mb-1 font-bold">Type</label>
-			<select id="type" bind:value={newAsset.type} class="w-full bg-background rounded p-2">
+<form on:submit|preventDefault={handleSubmit} class="space-y-4">
+	<h2 class="font-headline text-2xl text-text-light mb-4">
+		{asset ? 'Edit Asset' : 'Add New Asset'}
+	</h2>
+
+	<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+		<div class="md:col-span-2">
+			<label for="type" class="block mb-1 font-bold text-text-light">Type</label>
+			<select id="type" bind:value={formData.type} class="w-full bg-background text-text-light rounded p-2">
 				<option value="cash">Cash</option>
 				<option value="stock">Stock</option>
 				<option value="crypto">Crypto</option>
 			</select>
 		</div>
-
 		<div>
-			<label for="name" class="block mb-1 font-bold">Name</label>
-			<input type="text" id="name" bind:value={newAsset.name} required class="w-full bg-background rounded p-2" placeholder="e.g., Checking Account" />
+			<label for="name" class="block mb-1 font-bold text-text-light">Location/Account</label>
+			<input type="text" id="name" bind:value={formData.name} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., Trade Republic, ING" />
 		</div>
-
+		{#if formData.type !== 'cash'}
+			<div>
+				<label for="symbol" class="block mb-1 font-bold text-text-light">Symbol</label>
+				<input type="text" id="symbol" bind:value={formData.symbol} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., AAPL, BTC" />
+			</div>
+		{/if}
 		<div>
-			<label for="quantity" class="block mb-1 font-bold">Quantity</label>
-			<input type="number" step="any" id="quantity" bind:value={newAsset.quantity} required class="w-full bg-background rounded p-2" />
+			<label for="quantity" class="block mb-1 font-bold text-text-light">{formData.type === 'cash' ? 'Amount' : 'Quantity'}</label>
+			<input type="number" step="any" id="quantity" bind:value={formData.quantity} required class="w-full bg-background text-text-light rounded p-2" />
 		</div>
-
 		<div>
-			<label for="symbol" class="block mb-1 font-bold">Symbol</label>
-			<input type="text" id="symbol" bind:value={newAsset.symbol} class="w-full bg-background rounded p-2" placeholder="e.g., AAPL, BTC" />
+			<label for="currency" class="block mb-1 font-bold text-text-light">Currency</label>
+			<input type="text" id="currency" bind:value={formData.currency} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., USD, EUR" />
 		</div>
-
-		<div>
-			<label for="currency" class="block mb-1 font-bold">Currency</label>
-			<input type="text" id="currency" bind:value={newAsset.currency} class="w-full bg-background rounded p-2" placeholder="e.g., USD, EUR" />
-		</div>
-
-		<div>
-			<label for="purchase_price" class="block mb-1 font-bold">Purchase Price</label>
-			<input type="number" step="any" id="purchase_price" bind:value={newAsset.purchase_price} class="w-full bg-background rounded p-2" />
-		</div>
+		{#if formData.type !== 'cash'}
+			<div class="md:col-span-2">
+				<label for="purchase_price" class="block mb-1 font-bold text-text-light">Purchase Price (per unit)</label>
+				<input type="number" step="any" id="purchase_price" bind:value={formData.purchase_price} required class="w-full bg-background text-text-light rounded p-2" />
+			</div>
+		{/if}
 	</div>
 
-	<button type="submit" disabled={isLoading} class="bg-primary hover:opacity-80 text-white font-bold py-2 px-4 rounded mt-4 w-full">
-		{#if isLoading}
-			Adding...
-		{:else}
-			Add Asset
+
+	<div class="flex gap-4 mt-4">
+		{#if asset}
+			<button type="button" on:click={handleDeleteClick} disabled={isLoading} class="bg-loss hover:opacity-80 text-white font-bold py-2 px-4 rounded w-1/3">
+				{isLoading ? '...' : 'Delete'}
+			</button>
 		{/if}
-	</button>
+		<button type="submit" disabled={isLoading} class="bg-primary hover:opacity-80 text-white font-bold py-2 px-4 rounded w-full">
+			{#if isLoading}
+				Saving...
+			{:else}
+				{asset ? 'Save Changes' : 'Add Asset'}
+			{/if}
+		</button>
+	</div>
 
 	{#if error}
 		<p class="text-loss mt-4">{error}</p>

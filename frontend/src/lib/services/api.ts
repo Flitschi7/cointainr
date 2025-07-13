@@ -27,3 +27,29 @@ export async function createAsset(assetData: Omit<Asset, 'id'>): Promise<Asset> 
 	const newAsset: Asset = await response.json();
 	return newAsset;
 }
+export async function deleteAsset(assetId: number): Promise<void> {
+	const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
+		method: 'DELETE'
+	});
+	if (!response.ok) {
+		throw new Error('Failed to delete asset');
+	}
+}
+
+export async function updateAsset(
+	assetId: number,
+	assetData: Partial<Omit<Asset, 'id'>>
+): Promise<Asset> {
+	const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
+		method: 'PUT',
+		headers: {
+			'Content-Type': 'application/json'
+		},
+		body: JSON.stringify(assetData)
+	});
+	if (!response.ok) {
+		throw new Error('Failed to update asset');
+	}
+	const updatedAsset: Asset = await response.json();
+	return updatedAsset;
+}
