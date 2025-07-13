@@ -37,9 +37,7 @@ class Asset(Base):
     quantity = Column(Float, nullable=False)
 
     # --- Optional Fields ---
-    symbol = Column(
-        String, index=True, nullable=True
-    )  # e.g., "BTC", "AAPL"
+    symbol = Column(String, index=True, nullable=True)  # e.g., "BTC", "AAPL"
     currency = Column(
         String, nullable=True
     )  # e.g., "EUR", "USD" (current price currency, usually USD)
