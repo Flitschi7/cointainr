@@ -1,62 +1,76 @@
+
 <script lang="ts">
-	import { createEventDispatcher, onMount } from 'svelte';
-	import type { Asset } from '$lib/types';
-	import { createAsset, updateAsset, deleteAsset } from '$lib/services/api';
-	import Modal from '$lib/components/Modal.svelte';
-	import ConfirmDeleteModal from '$lib/components/ConfirmDeleteModal.svelte';
+import { createEventDispatcher, onMount } from 'svelte';
+import type { Asset } from '$lib/types';
+import { createAsset, updateAsset, deleteAsset } from '$lib/services/api';
+import Modal from '$lib/components/Modal.svelte';
+import ConfirmDeleteModal from '$lib/components/ConfirmDeleteModal.svelte';
 
-	export let asset: Asset | null = null;
+export let asset: Asset | null = null;
+const dispatch = createEventDispatcher();
 
-	const dispatch = createEventDispatcher();
+let formData: Partial<Omit<Asset, 'id'>> = {};
+let showConfirmDeleteModal = false;
 
-	let formData: Partial<Omit<Asset, 'id'>> = {};
-	let showConfirmDeleteModal = false;
+onMount(() => {
+	formData = asset
+		? { ...asset }
+		: {
+			  type: 'cash',
+			  name: '',
+			  quantity: 0,
+			  symbol: null,
+			  currency: 'EUR',
+			  purchase_price: null,
+				  buy_currency: 'EUR',
+		  };
+});
 
-	onMount(() => {
+let isLoading = false;
+let error: string | null = null;
+
+
+async function handleSubmit() {
+	isLoading = true;
+	error = null;
+	try {
 		if (asset) {
-			formData = { ...asset };
+			// Edit mode
+			await updateAsset(asset.id, formData);
 		} else {
-			formData = {
-				type: 'cash',
-				name: '',
-				quantity: 0,
-				symbol: null,
-				currency: 'EUR',
-				purchase_price: null
-			};
+			// Add mode
+			await createAsset(formData as Omit<Asset, 'id'>);
 		}
-	});
-
-	let isLoading = false;
-	let error: string | null = null;
-
-	async function handleSubmit() {
-		// ... (This function remains unchanged)
+		dispatch('saved');
+		dispatch('close');
+	} catch (e: any) {
+		error = e.message || 'An error occurred.';
+	} finally {
+		isLoading = false;
 	}
+}
 
-	// This function now just opens the confirmation modal
-	function handleDeleteClick() {
-		showConfirmDeleteModal = true;
+function handleDeleteClick() {
+	showConfirmDeleteModal = true;
+}
+
+async function executeDelete() {
+	if (!asset) return;
+	showConfirmDeleteModal = false;
+	isLoading = true;
+	error = null;
+	try {
+		await deleteAsset(asset.id);
+		dispatch('saved');
+		dispatch('close');
+	} catch (e: any) {
+		error = e.message;
+	} finally {
+		isLoading = false;
 	}
-
-	// This function performs the actual deletion
-	async function executeDelete() {
-		if (!asset) return;
-
-		showConfirmDeleteModal = false; // Close the confirmation modal
-		isLoading = true;
-		error = null;
-		try {
-			await deleteAsset(asset.id);
-			dispatch('saved'); // Trigger a refresh on the main page
-			dispatch('close'); // Close the main edit modal
-		} catch (e: any) {
-			error = e.message;
-		} finally {
-			isLoading = false;
-		}
-	}
+}
 </script>
+
 
 {#if showConfirmDeleteModal}
 	<Modal on:close={() => (showConfirmDeleteModal = false)}>
@@ -84,7 +98,7 @@
 		</div>
 		{#if formData.type !== 'cash'}
 			<div>
-				<label for="symbol" class="block mb-1 font-bold text-text-light">Symbol</label>
+				<label for="symbol" class="block mb-1 font-bold text-text-light">Symbol/ISIN</label>
 				<input type="text" id="symbol" bind:value={formData.symbol} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., AAPL, BTC" />
 			</div>
 		{/if}
@@ -93,9 +107,15 @@
 			<input type="number" step="any" id="quantity" bind:value={formData.quantity} required class="w-full bg-background text-text-light rounded p-2" />
 		</div>
 		<div>
-			<label for="currency" class="block mb-1 font-bold text-text-light">Currency</label>
+			<label for="currency" class="block mb-1 font-bold text-text-light">Current Price Currency</label>
 			<input type="text" id="currency" bind:value={formData.currency} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., USD, EUR" />
 		</div>
+		{#if formData.type !== 'cash'}
+			<div>
+				<label for="buy_currency" class="block mb-1 font-bold text-text-light">Buy Price Currency</label>
+				<input type="text" id="buy_currency" bind:value={formData.buy_currency} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., USD, EUR" />
+			</div>
+		{/if}
 		{#if formData.type !== 'cash'}
 			<div class="md:col-span-2">
 				<label for="purchase_price" class="block mb-1 font-bold text-text-light">Purchase Price (per unit)</label>
@@ -103,7 +123,6 @@
 			</div>
 		{/if}
 	</div>
-
 
 	<div class="flex gap-4 mt-4">
 		{#if asset}

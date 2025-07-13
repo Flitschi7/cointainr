@@ -2,17 +2,22 @@ import type { Asset } from '$lib/types';
 
 const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
 
-// This is our existing function
+// --- Asset API Service ---
+
+/**
+ * Fetch all assets from the backend API.
+ */
 export async function getAssets(): Promise<Asset[]> {
 	const response = await fetch(`${API_BASE_URL}/assets/`);
 	if (!response.ok) {
 		throw new Error('Failed to fetch assets');
 	}
-	const assets: Asset[] = await response.json();
-	return assets;
+	return await response.json();
 }
 
-// Add this new function
+/**
+ * Create a new asset.
+ */
 export async function createAsset(assetData: Omit<Asset, 'id'>): Promise<Asset> {
 	const response = await fetch(`${API_BASE_URL}/assets/`, {
 		method: 'POST',
@@ -24,9 +29,12 @@ export async function createAsset(assetData: Omit<Asset, 'id'>): Promise<Asset> 
 	if (!response.ok) {
 		throw new Error('Failed to create asset');
 	}
-	const newAsset: Asset = await response.json();
-	return newAsset;
+	return await response.json();
 }
+
+/**
+ * Delete an asset by ID.
+ */
 export async function deleteAsset(assetId: number): Promise<void> {
 	const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
 		method: 'DELETE'
@@ -36,6 +44,9 @@ export async function deleteAsset(assetId: number): Promise<void> {
 	}
 }
 
+/**
+ * Update an asset by ID.
+ */
 export async function updateAsset(
 	assetId: number,
 	assetData: Partial<Omit<Asset, 'id'>>
@@ -50,6 +61,5 @@ export async function updateAsset(
 	if (!response.ok) {
 		throw new Error('Failed to update asset');
 	}
-	const updatedAsset: Asset = await response.json();
-	return updatedAsset;
+	return await response.json();
 }

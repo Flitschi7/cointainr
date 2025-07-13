@@ -4,5 +4,6 @@
   },
   "editor.quickSuggestions": {
     "strings": "on"
-  }
+  },
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/Scripts/python.exe"
 }

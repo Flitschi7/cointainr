@@ -35,6 +35,7 @@ __MACOSX
 .env.*
 !.env.example
 !.env.test
+instructions.instructions.md
 
 # =============================================================================
 # Python / Backend

@@ -4,26 +4,43 @@ import enum
 
 
 class AssetType(str, enum.Enum):
+    """
+    Enum for supported asset types.
+    """
+
     CASH = "cash"
     STOCK = "stock"
     CRYPTO = "crypto"
 
 
 class Asset(Base):
+    """
+    SQLAlchemy model for financial assets.
+    Represents cash, stocks, crypto, etc.
+    """
+
     __tablename__ = "assets"
 
+    # --- Primary Key ---
     id = Column(Integer, primary_key=True, index=True)
+
+    # --- Asset Type ---
     type = Column(PyEnum(AssetType), nullable=False)
 
-    # Common fields
+    # --- Common Fields ---
     name = Column(
         String, index=True, nullable=False
     )  # e.g., "Bitcoin", "Apple Inc.", "Checking Account"
     quantity = Column(Float, nullable=False)
 
-    # Optional fields
+    # --- Optional Fields ---
     symbol = Column(
         String, unique=True, index=True, nullable=True
     )  # e.g., "BTC", "AAPL"
-    currency = Column(String, nullable=True)  # e.g., "EUR", "USD"
-    purchase_price = Column(Float, nullable=True)
+    currency = Column(
+        String, nullable=True
+    )  # e.g., "EUR", "USD" (current price currency, usually USD)
+    purchase_price = Column(Float, nullable=True)  # Purchase price per unit
+    buy_currency = Column(
+        String, nullable=True
+    )  # Currency of purchase price (e.g., "EUR", "USD")

@@ -1,17 +1,36 @@
+import os
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import declarative_base
 
-# The database URL for a local SQLite file named cointainr.db
-DATABASE_URL = "sqlite+aiosqlite:///./cointainr.db"
+# --- Database Configuration ---
 
-# Create the SQLAlchemy engine
-# connect_args is needed for SQLite to enforce foreign key constraints
-engine = create_async_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
-# Create a configured "Session" class
-# This will be our handle to the database
-SessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def get_database_url() -> str:
+    """
+    Get the database URL from environment variable or use default SQLite file.
+    """
+    return os.getenv("COINTAINR_DATABASE_URL", "sqlite+aiosqlite:///./cointainr.db")
 
-# Base class for our database models
-# All our models will inherit from this class
+
+DATABASE_URL = get_database_url()
+
+# --- Engine & Session Setup ---
+
+# Create the SQLAlchemy async engine
+engine = create_async_engine(
+    DATABASE_URL,
+    connect_args=(
+        {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+    ),
+)
+
+# Create a configured async sessionmaker
+SessionLocal = async_sessionmaker(
+    autocommit=False,
+    autoflush=False,
+    bind=engine,
+)
+
+# --- Base Model ---
+
 Base = declarative_base()

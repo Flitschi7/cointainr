@@ -1,45 +1,57 @@
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware  # Import the CORS middleware
-
+from fastapi.middleware.cors import CORSMiddleware
 from app.db.session import engine, Base
+
 from app.api.endpoints import assets
+from app.api.endpoints import price
 
 metadata = Base.metadata
 
-app = FastAPI(title="Cointainr API")
 
-# Define the list of allowed origins (your frontend's address)
-origins = [
-    "http://localhost:5173",
-]
-
-# Add the CORS middleware to the application
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allows all headers
-)
-
-
-# Include the router for asset endpoints
-app.include_router(assets.router, prefix="/api/v1/assets", tags=["assets"])
-
-
-@app.on_event("startup")
-async def startup_event():
+def create_app() -> FastAPI:
     """
-    On startup, create the database tables.
+    Application factory for FastAPI app.
+    Configures middleware, routers, and events.
     """
-    async with engine.begin() as conn:
-        await conn.run_sync(metadata.create_all)
+    app = FastAPI(title="Cointainr API")
+
+    # List of allowed origins for CORS (e.g., frontend address)
+    origins = [
+        "http://localhost:5173",
+    ]
+
+    # Add CORS middleware to allow cross-origin requests
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],  # Allow all HTTP methods
+        allow_headers=["*"],  # Allow all headers
+    )
+
+    # Register asset endpoints under /api/v1/assets
+    app.include_router(assets.router, prefix="/api/v1/assets", tags=["assets"])
+    # Register price endpoints under /api/v1/price
+    app.include_router(price.router, prefix="/api/v1/price", tags=["price"])
+
+    @app.on_event("startup")
+    async def startup_event():
+        """
+        On application startup, create database tables if they do not exist.
+        """
+        async with engine.begin() as conn:
+            await conn.run_sync(metadata.create_all)
+
+    @app.get("/")
+    def read_root():
+        """
+        Root endpoint for the Cointainr API.
+        Returns a welcome message.
+        """
+        return {"message": "Welcome to the Cointainr Backend!"}
+
+    return app
 
 
-@app.get("/")
-def read_root():
-    """
-    Root endpoint for the Cointainr API.
-    Returns a welcome message.
-    """
-    return {"message": "Welcome to the Cointainr Backend!"}
+# App instance for ASGI servers
+app = create_app()
