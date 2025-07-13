@@ -10,6 +10,7 @@ export interface Asset {
 	id: number;
 	type: AssetType;
 	name: string;
+	assetname?: string | null;
 	quantity: number;
 	symbol: string | null;
 	currency: string | null;

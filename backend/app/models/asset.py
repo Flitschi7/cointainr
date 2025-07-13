@@ -30,12 +30,15 @@ class Asset(Base):
     # --- Common Fields ---
     name = Column(
         String, index=True, nullable=False
-    )  # e.g., "Bitcoin", "Apple Inc.", "Checking Account"
+    )  # e.g., location name (e.g., "Depot 1", "Wallet")
+    assetname = Column(
+        String, index=True, nullable=True
+    )  # e.g., "Apple Inc.", "Bitcoin", "AAPL", "BTC"
     quantity = Column(Float, nullable=False)
 
     # --- Optional Fields ---
     symbol = Column(
-        String, unique=True, index=True, nullable=True
+        String, index=True, nullable=True
     )  # e.g., "BTC", "AAPL"
     currency = Column(
         String, nullable=True

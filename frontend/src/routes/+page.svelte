@@ -61,7 +61,7 @@ function handleSave() {
 	<section class="bg-surface rounded-lg p-4 mb-8 flex justify-between items-center">
 		<div class="flex items-center gap-4">
 			<input type="text" bind:value={filterLocation} placeholder="Location/Broker..." class="bg-background text-text-light rounded p-2" />
-			<input type="text" bind:value={filterSymbol} placeholder="Symbol..." class="bg-background text-text-light rounded p-2" />
+			<input type="text" bind:value={filterSymbol} placeholder="Symbol/ISIN..." class="bg-background text-text-light rounded p-2" />
 			<select bind:value={filterType} class="bg-background text-text-light rounded p-2">
 				<option value="all">All Types</option>
 				<option value="cash">Cash</option>
@@ -85,7 +85,7 @@ function handleSave() {
 						<thead>
 							<tr class="border-b border-surface">
 <th class="font-bold text-left px-4 py-2 col-span-2">Location/Broker</th>
-<th class="font-bold text-left px-4 py-2">Symbol</th>
+<th class="font-bold text-left px-4 py-2">Asset</th>
 <th class="font-bold text-left px-4 py-2">Type</th>
 <th class="font-bold text-right px-4 py-2">Current Price</th>
 <th class="font-bold text-right px-4 py-2">Value</th>
@@ -104,7 +104,7 @@ function handleSave() {
 									aria-label={`Edit asset ${asset.name}`}
 								>
 									<td class="px-4 py-2 col-span-2">{asset.name}</td>
-									<td class="px-4 py-2">{asset.symbol ?? '-'}</td>
+<td class="px-4 py-2">{asset.assetname ?? asset.symbol ?? '-'}</td>
 									<td class="px-4 py-2 capitalize">{asset.type}</td>
 <td class="px-4 py-2 text-right">
 	{#if asset.type === 'cash'}

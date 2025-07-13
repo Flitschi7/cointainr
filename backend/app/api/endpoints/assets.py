@@ -35,9 +35,52 @@ async def create_asset(
     asset_in: asset_schema.AssetCreate,
 ) -> asset_model.Asset:
     """
-    Create a new asset.
+    Create a new asset. Automatically fetches assetname for ISINs or symbols.
     """
-    asset = await crud_asset.create_asset(db=db, asset_in=asset_in)
+    from app.api.endpoints.price import finnhub_client
+    import yfinance as yf
+
+    asset_data = asset_in.model_dump()
+    assetname = None
+    identifier = asset_data.get("symbol")
+    # Only fetch assetname if symbol/ISIN is provided
+    if identifier:
+        # ISIN: 12 alphanumeric chars
+        if len(identifier) == 12 and identifier.isalnum():
+            try:
+                ticker = yf.Ticker(identifier)
+                info = ticker.info
+                assetname = (
+                    info.get("shortName")
+                    or info.get("longName")
+                    or info.get("displayName")
+                )
+            except Exception:
+                assetname = None
+        else:
+            # Try Finnhub symbol lookup
+            try:
+                search_result = finnhub_client.symbol_lookup(identifier)
+                if search_result and search_result.get("count", 0) > 0:
+                    assetname = search_result["result"][0].get("description")
+            except Exception:
+                assetname = None
+            # Fallback to Yahoo Finance
+            if not assetname:
+                try:
+                    ticker = yf.Ticker(identifier)
+                    info = ticker.info
+                    assetname = (
+                        info.get("shortName")
+                        or info.get("longName")
+                        or info.get("displayName")
+                    )
+                except Exception:
+                    assetname = None
+    asset_data["assetname"] = assetname or identifier or ""
+    asset = await crud_asset.create_asset(
+        db=db, asset_in=asset_schema.AssetCreate(**asset_data)
+    )
     return asset
 
 

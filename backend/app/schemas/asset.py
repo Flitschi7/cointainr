@@ -12,6 +12,7 @@ class AssetBase(BaseModel):
 
     type: AssetType
     name: str
+    assetname: str | None = None
     quantity: float
     symbol: str | None = None
     currency: str | None = None
@@ -48,6 +49,7 @@ class AssetUpdate(BaseModel):
     """
 
     type: Optional[AssetType] = None
+    assetname: Optional[str] = None
     name: Optional[str] = None
     quantity: Optional[float] = None
     symbol: Optional[str] = None

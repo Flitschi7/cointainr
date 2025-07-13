@@ -9,21 +9,22 @@ import ConfirmDeleteModal from '$lib/components/ConfirmDeleteModal.svelte';
 export let asset: Asset | null = null;
 const dispatch = createEventDispatcher();
 
-let formData: Partial<Omit<Asset, 'id'>> = {};
+let formData: Partial<Omit<Asset, 'id'>> & { assetname?: string | null } = {};
 let showConfirmDeleteModal = false;
 
 onMount(() => {
 	formData = asset
 		? { ...asset }
-		: {
-			  type: 'cash',
-			  name: '',
-			  quantity: 0,
-			  symbol: null,
-			  currency: 'EUR',
-			  purchase_price: null,
-				  buy_currency: 'EUR',
-		  };
+	: {
+		  type: 'cash',
+		  name: '',
+		  assetname: '',
+		  quantity: 0,
+		  symbol: null,
+		  currency: 'EUR',
+		  purchase_price: null,
+		  buy_currency: 'EUR',
+	  };
 });
 
 let isLoading = false;
@@ -93,13 +94,14 @@ async function executeDelete() {
 			</select>
 		</div>
 		<div>
-			<label for="name" class="block mb-1 font-bold text-text-light">Location/Account</label>
+			<label for="name" class="block mb-1 font-bold text-text-light">Location/Broker</label>
 			<input type="text" id="name" bind:value={formData.name} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., Trade Republic, ING" />
 		</div>
 		{#if formData.type !== 'cash'}
 			<div>
-				<label for="symbol" class="block mb-1 font-bold text-text-light">Symbol/ISIN</label>
-				<input type="text" id="symbol" bind:value={formData.symbol} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., AAPL, BTC" />
+<label for="symbol" class="block mb-1 font-bold text-text-light">Symbol/ISIN</label>
+<input type="text" id="symbol" bind:value={formData.symbol} required class="w-full bg-background text-text-light rounded p-2" placeholder="e.g., AAPL, BTC" />
+
 			</div>
 		{/if}
 		<div>
