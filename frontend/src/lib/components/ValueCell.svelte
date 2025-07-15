@@ -1,72 +1,86 @@
 <script lang="ts">
 import { onMount } from 'svelte';
+import { browser } from '$app/environment';
+import { getStockPrice, getCryptoPrice, convertCurrency } from '$lib/services/api';
+import type { PriceResponse } from '$lib/services/api';
+
 export let symbol: string;
 export let quantity: number;
 export let currency: string;
+export let assetType: 'stock' | 'crypto' = 'stock'; // New prop to distinguish asset types
+export let refreshTrigger: number = 0; // Change to numeric trigger instead of boolean
+
 let value: number | null = null;
 let error: string | null = null;
 let isLoading = true;
-
-const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+let priceData: PriceResponse | null = null;
 
 onMount(async () => {
-    // Fallbacks for empty props
-    const safeSymbol = symbol || '';
-    const safeCurrency = currency || 'USD';
+    if (browser) {
+        await fetchPrice(false); // Use cache on initial load
+    }
+});
+
+// Watch for refresh trigger changes - numeric trigger is better than boolean
+let lastRefreshTrigger = 0;
+$: if (browser && refreshTrigger > lastRefreshTrigger) {
+    fetchPrice(true);
+    lastRefreshTrigger = refreshTrigger;
+}
+
+async function fetchPrice(shouldForceRefresh: boolean = false) {
+    // Reset state
+    value = null;
+    error = null;
+    isLoading = true;
+    priceData = null;
+    
     try {
-        // Get current price in USD
+        // Fallbacks for empty props
+        const safeSymbol = symbol || '';
+        const safeCurrency = currency || 'USD';
+        
         if (!safeSymbol) {
             error = 'No symbol provided';
             return;
         }
-        const res = await fetch(`${API_BASE_URL}/price/stock/${safeSymbol}`);
-        if (!res.ok) {
-            const errData = await res.json().catch(() => ({}));
-            error = errData.detail || 'Failed to fetch price';
-            return;
+
+        // Fetch price based on asset type (force refresh only when explicitly requested)
+        if (assetType === 'crypto') {
+            priceData = await getCryptoPrice(safeSymbol, shouldForceRefresh);
+        } else {
+            priceData = await getStockPrice(safeSymbol, shouldForceRefresh);
         }
-        const data = await res.json();
-        if (!data.price) {
+
+        if (!priceData.price) {
             error = 'No price available for symbol';
             return;
         }
-        let price = data.price;
-        let priceCurrency = data.currency || 'USD';
-        // Convert to selected currency if needed
+
+        let price = priceData.price;
+        let priceCurrency = priceData.currency || 'USD';
+
+        // Convert to selected currency if needed (force refresh only when explicitly requested)
         if (safeCurrency && safeCurrency !== priceCurrency) {
-            const amount = typeof price === 'number' && !isNaN(price) ? price : 0;
-            // Use correct query parameter names for backend
-            const convRes = await fetch(`${API_BASE_URL}/price/convert?from_currency=${priceCurrency}&to_currency=${safeCurrency}&amount=${amount}`);
-            if (!convRes.ok) {
-                const convErrData = await convRes.json().catch(() => ({}));
-                error = convErrData.detail || 'Failed to convert price';
-                return;
-            }
-            const convData = await convRes.json();
-            // For exchangerate-api.com, the result is in conversion_result
-            if (typeof convData.conversion_result === 'number') {
-                price = convData.conversion_result;
-            } else if (typeof convData.converted === 'number') {
-                price = convData.converted;
-            } else {
-                error = 'Conversion failed';
-                return;
-            }
+            const conversionData = await convertCurrency(priceCurrency, safeCurrency, price, shouldForceRefresh);
+            price = conversionData.converted;
         }
+
         value = price * quantity;
     } catch (e: any) {
         error = e.message;
+        console.error('Error fetching price:', e);
     } finally {
         isLoading = false;
     }
-});
+}
 </script>
 
 <span>
     {#if isLoading}
-        ...
+        <span class="text-gray-400">...</span>
     {:else if error}
-        <span class="text-loss">{typeof error === 'string' ? error : 'Error'}</span>
+        <span class="text-loss" title={error}>Error</span>
     {:else if value !== null}
         {value.toFixed(2)} {currency}
     {:else}
