@@ -5,6 +5,11 @@ from app.db.session import engine, Base
 from app.api.endpoints import assets
 from app.api.endpoints import price
 
+# Import models to ensure they are registered with SQLAlchemy
+from app.models import asset
+from app.models import price_cache
+from app.models import conversion_cache
+
 metadata = Base.metadata
 
 

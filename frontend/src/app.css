@@ -11,3 +11,12 @@
 
 	--font-headline: 'Space Grotesk', system-ui, sans-serif;
 }
+
+/* Custom profit/loss color classes */
+.text-profit {
+	color: var(--color-profit);
+}
+
+.text-loss {
+	color: var(--color-loss);
+}
