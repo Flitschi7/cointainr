@@ -147,15 +147,7 @@ function formatLastRefresh(date: Date | null): string {
 
 <div class="bg-background text-text-light min-h-screen p-8">
 	<header class="mb-8">
-		<h1 class="font-headline text-4xl" style="color: var(--color-primary);">Cointainr Dashboard</h1>
-		<p class="font-sans mt-2 text-lg">Your consolidated asset overview.</p>
-		
-		<!-- Simple Refresh Controls -->
-		<div class="mt-4 flex flex-wrap items-center gap-4">
-			<div class="text-sm text-gray-400">
-				Last refresh: {formatLastRefresh(lastRefreshTime)}
-			</div>
-		</div>
+		<h1 class="font-headline text-4xl text-gold">Cointainr</h1>
 	</header>
 
 	<section class="bg-surface rounded-lg p-4 mb-8 flex justify-between items-center">
@@ -178,29 +170,29 @@ function formatLastRefresh(date: Date | null): string {
 			>
 				{isRefreshing ? 'Refreshing...' : 'Refresh Prices'}
 			</button>
-			<button on:click={openAddModal} class="bg-primary hover:opacity-80 text-white font-bold py-2 px-4 rounded">
+			<button on:click={openAddModal} class="bg-gold hover:opacity-80 text-white font-bold py-2 px-4 rounded">
 				Add Asset
 			</button>
 		</div>
 	</section>
 
 	<main class="bg-surface rounded-lg p-6 shadow-lg">
-		<h2 class="font-headline text-2xl mb-4">Your Assets</h2>
+		<h2 class="font-headline text-2xl mb-4">Assets</h2>
 		{#if filteredAssets.length > 0}
-				<div class="overflow-x-auto">
-					<table class="w-full font-mono border-separate border-spacing-0">
+				<div class="overflow-hidden rounded-lg">
+					<table class="w-full font-mono border-collapse border border-gray-600 rounded-table">
 						<thead>
-							<tr class="border-b border-surface">
-<th class="font-bold text-left px-4 py-2 col-span-2">Location/Broker</th>
-<th class="font-bold text-left px-4 py-2">Asset</th>
-<th class="font-bold text-left px-4 py-2">Type</th>
-<th class="font-bold text-right px-4 py-2">Current Price</th>
-<th class="font-bold text-right px-4 py-2">Value</th>
-<th class="font-bold text-right px-4 py-2">Quantity</th>
-<th class="font-bold text-right px-4 py-2">Purchase Price</th>
-<th class="font-bold text-right px-4 py-2">Performance (%)</th>
-<th class="font-bold text-right px-4 py-2">Yield</th>
-<th class="font-bold text-center px-4 py-2">Status</th>
+							<tr class="bg-background border-b-2 border-gray-600">
+<th class="font-bold text-left px-4 py-3 border-r border-gray-600 col-span-2">Location/Broker</th>
+<th class="font-bold text-left px-4 py-3 border-r border-gray-600">Asset</th>
+<th class="font-bold text-left px-4 py-3 border-r border-gray-600">Type</th>
+<th class="font-bold text-right px-4 py-3 border-r border-gray-600">Current Price</th>
+<th class="font-bold text-right px-4 py-3 border-r border-gray-600">Value</th>
+<th class="font-bold text-right px-4 py-3 border-r border-gray-600">Quantity</th>
+<th class="font-bold text-right px-4 py-3 border-r border-gray-600">Purchase Price</th>
+<th class="font-bold text-right px-4 py-3 border-r border-gray-600">Performance (%)</th>
+<th class="font-bold text-right px-4 py-3 border-r border-gray-600">Yield</th>
+<th class="font-bold text-center px-4 py-3">Status</th>
 							</tr>
 						</thead>
 						<tbody>
@@ -209,13 +201,13 @@ function formatLastRefresh(date: Date | null): string {
 									tabindex="0"
 									on:click={() => openEditModal(asset)}
 									on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openEditModal(asset)}
-									class="hover:bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary border-b border-background transition-colors"
+									class="hover:bg-surface cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary border-b border-gray-600 transition-colors"
 									aria-label={`Edit asset ${asset.name}`}
 								>
-									<td class="px-4 py-2 col-span-2">{asset.name}</td>
-<td class="px-4 py-2">{asset.assetname ?? asset.symbol ?? '-'}</td>
-									<td class="px-4 py-2 capitalize">{asset.type}</td>
-									<td class="px-4 py-2 text-right">
+									<td class="px-4 py-3 border-r border-gray-600 col-span-2">{asset.name}</td>
+<td class="px-4 py-3 border-r border-gray-600">{asset.assetname ?? asset.symbol ?? '-'}</td>
+									<td class="px-4 py-3 border-r border-gray-600 capitalize">{asset.type}</td>
+									<td class="px-4 py-3 border-r border-gray-600 text-right">
 	{#if asset.type === 'cash'}
 		-
 	{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -230,7 +222,7 @@ function formatLastRefresh(date: Date | null): string {
 		-
 	{/if}
 </td>
-<td class="px-4 py-2 text-right">
+<td class="px-4 py-3 border-r border-gray-600 text-right">
 	{#if asset.type === 'cash'}
 		{asset.quantity.toFixed(2)} {asset.currency}
 	{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -245,21 +237,21 @@ function formatLastRefresh(date: Date | null): string {
 		-
 	{/if}
 </td>
-									<td class="px-4 py-2 text-right">
+									<td class="px-4 py-3 border-r border-gray-600 text-right">
 										{#if asset.type === 'cash'}
 											-
 										{:else}
 											{asset.quantity}
 										{/if}
 									</td>
-									<td class="px-4 py-2 text-right">
+									<td class="px-4 py-3 border-r border-gray-600 text-right">
 										{#if asset.purchase_price}
 											{asset.purchase_price.toFixed(2)} {asset.buy_currency ?? asset.currency ?? ''}
 										{:else}
 											-
 										{/if}
 									</td>
-									<td class="px-4 py-2 text-right">
+									<td class="px-4 py-3 border-r border-gray-600 text-right">
 										{#if asset.type === 'cash'}
 											-
 										{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -276,7 +268,7 @@ function formatLastRefresh(date: Date | null): string {
 											-
 										{/if}
 									</td>
-									<td class="px-4 py-2 text-right">
+									<td class="px-4 py-3 border-r border-gray-600 text-right">
 										{#if asset.type === 'cash'}
 											-
 										{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -293,7 +285,7 @@ function formatLastRefresh(date: Date | null): string {
 											-
 										{/if}
 									</td>
-<td class="px-4 py-2 text-center">
+<td class="px-4 py-3 text-center">
 	{#if cacheStatusMap.has(asset.id)}
 		{@const cacheStatus = cacheStatusMap.get(asset.id)}
 		{#if cacheStatus}

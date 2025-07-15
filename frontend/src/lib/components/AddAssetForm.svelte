@@ -132,7 +132,7 @@ async function executeDelete() {
 				{isLoading ? '...' : 'Delete'}
 			</button>
 		{/if}
-		<button type="submit" disabled={isLoading} class="bg-primary hover:opacity-80 text-white font-bold py-2 px-4 rounded w-full">
+		<button type="submit" disabled={isLoading} class="{asset ? 'bg-primary' : 'bg-gold'} hover:opacity-80 text-white font-bold py-2 px-4 rounded w-full">
 			{#if isLoading}
 				Saving...
 			{:else}
