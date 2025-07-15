@@ -3,6 +3,7 @@ import { onMount } from 'svelte';
 import { browser } from '$app/environment';
 import { getStockPrice, getCryptoPrice, convertCurrency } from '$lib/services/api';
 import type { PriceResponse } from '$lib/services/api';
+import { formatCurrency } from '$lib/utils/numberFormat';
 
 export let symbol: string;
 export let quantity: number;
@@ -21,10 +22,10 @@ onMount(async () => {
     }
 });
 
-// Watch for refresh trigger changes - numeric trigger is better than boolean
+// Watch for refresh trigger changes - fetch cached prices after refresh
 let lastRefreshTrigger = 0;
 $: if (browser && refreshTrigger > lastRefreshTrigger) {
-    fetchPrice(true);
+    fetchPrice(false); // Use cache since refresh-all already updated prices
     lastRefreshTrigger = refreshTrigger;
 }
 
@@ -82,7 +83,7 @@ async function fetchPrice(shouldForceRefresh: boolean = false) {
     {:else if error}
         <span class="text-loss" title={error}>Error</span>
     {:else if value !== null}
-        {value.toFixed(2)} {currency}
+        {formatCurrency(value, currency)}
     {:else}
         -
     {/if}

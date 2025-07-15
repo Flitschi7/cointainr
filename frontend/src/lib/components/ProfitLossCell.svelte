@@ -3,6 +3,7 @@ import { onMount } from 'svelte';
 import { browser } from '$app/environment';
 import { getStockPrice, getCryptoPrice, convertCurrency } from '$lib/services/api';
 import type { PriceResponse } from '$lib/services/api';
+import { formatPercentage, formatCurrency } from '$lib/utils/numberFormat';
 
 export let symbol: string;
 export let quantity: number;
@@ -86,11 +87,9 @@ function formatValue(value: number | null): string {
     if (value === null) return '-';
     
     if (displayType === 'percentage') {
-        const sign = value >= 0 ? '+' : '';
-        return `${sign}${value.toFixed(2)}%`;
+        return formatPercentage(value);
     } else {
-        const sign = value >= 0 ? '+' : '';
-        return `${sign}${Math.abs(value).toFixed(2)} ${currency}`;
+        return formatCurrency(value, currency);
     }
 }
 

@@ -3,6 +3,7 @@ import { onMount } from 'svelte';
 import { browser } from '$app/environment';
 import { getStockPrice, getCryptoPrice } from '$lib/services/api';
 import type { PriceResponse } from '$lib/services/api';
+import { formatCurrency } from '$lib/utils/numberFormat';
 
 export let symbol: string;
 export let assetType: 'stock' | 'crypto' = 'stock';
@@ -54,7 +55,7 @@ async function fetchPrice() {
     {:else if error}
         <span class="text-loss" title={error}>Err</span>
     {:else if priceData && priceData.price !== null}
-        {priceData.price.toFixed(2)} {priceData.currency}
+        {formatCurrency(priceData.price, priceData.currency)}
     {:else}
         -
     {/if}

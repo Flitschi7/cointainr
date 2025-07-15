@@ -8,7 +8,10 @@ import type { Asset } from '$lib/types';
 import type { RefreshAllResponse, AssetCacheStatus } from '$lib/services/api';
 import AddAssetForm from '$lib/components/AddAssetForm.svelte';
 import Modal from '$lib/components/Modal.svelte';
+import { PriceManagementService } from '$lib/services/priceManagement';
+import { PortfolioCalculationService, type PortfolioTotals } from '$lib/services/portfolioCalculations';
 import { onMount, onDestroy } from 'svelte';
+import { formatCurrency, formatPercentage, formatNumber } from '$lib/utils/numberFormat';
 
 /** @type {import('./$types').PageData} */
 export let data;
@@ -47,14 +50,16 @@ type SortField = 'location' | 'asset' | 'type' | 'currentPrice' | 'value' | 'qua
 let sortField: SortField | null = null;
 let sortDirection: 'asc' | 'desc' = 'asc';
 
+// Initialize services
+const priceManagementService = new PriceManagementService();
+let portfolioCalculationService: PortfolioCalculationService;
+
 // Helper function to get current price for an asset
 function getCurrentPrice(asset: Asset): number {
 	if (asset.type === 'cash') {
 		return 1; // Cash has no price, value is just quantity
 	}
-	const priceData = assetPrices.get(asset.id);
-	console.log(`getCurrentPrice debug - Asset ID: ${asset.id}, Symbol: ${asset.symbol}, Price data:`, priceData, `Price: ${priceData?.price || 0}`);
-	return priceData?.price || 0;
+	return priceManagementService.getCurrentPrice(asset);
 }
 
 // Helper function to calculate current value (for sorting)
@@ -185,53 +190,18 @@ function handleSort(field: SortField) {
 // Function to fetch all current prices for sorting and aggregation
 async function fetchAllCurrentPrices() {
 	console.log('=== fetchAllCurrentPrices START ===');
-	console.log('allAssets:', allAssets);
-	console.log('Non-cash assets to fetch prices for:', allAssets.filter(asset => asset.type !== 'cash'));
 	
 	try {
-		const pricePromises = allAssets
-			.filter(asset => asset.type !== 'cash') // Skip cash assets
-			.map(async (asset) => {
-				console.log(`Fetching price for asset: ${asset.symbol}, type: ${asset.type}`);
-				try {
-					let priceData;
-					// Use the same API functions that ValueCell uses
-					if (asset.type === 'crypto') {
-						priceData = await getCryptoPrice(asset.symbol || '', false);
-					} else if (asset.type === 'stock') {
-						priceData = await getStockPrice(asset.symbol || '', false);
-					}
-					
-					console.log(`Price data for ${asset.symbol}:`, priceData);
-					
-					if (priceData) {
-						return {
-							assetId: asset.id,
-							price: priceData.price || 0,
-							currency: priceData.currency || 'USD'
-						};
-					}
-				} catch (error) {
-					console.error(`Failed to fetch price for ${asset.symbol}:`, error);
-				}
-				return {
-					assetId: asset.id,
-					price: 0,
-					currency: 'USD'
-				};
-			});
-
-		const prices = await Promise.all(pricePromises);
-		console.log('All fetched prices:', prices);
+		// Use the price management service to fetch all prices
+		const pricesMap = await priceManagementService.fetchAllCurrentPrices(allAssets);
 		
-		// Update the assetPrices map
-		const newPricesMap = new Map();
-		prices.forEach(({ assetId, price, currency }) => {
-			newPricesMap.set(assetId, { price, currency });
-		});
-		
-		assetPrices = newPricesMap;
+		// Update the local variables
+		assetPrices = pricesMap;
 		pricesLoaded = true;
+		
+		// Initialize the portfolio calculation service with the updated prices
+		portfolioCalculationService = new PortfolioCalculationService(assetPrices);
+		
 		console.log('Updated assetPrices Map:', Array.from(assetPrices.entries()));
 		console.log('=== fetchAllCurrentPrices END ===');
 	} catch (error) {
@@ -255,7 +225,7 @@ let totalPerformance = 0;
 
 // Function to update all totals
 async function updateTotals() {
-	if (!pricesLoaded) {
+	if (!pricesLoaded || !portfolioCalculationService) {
 		totalValue = 0;
 		totalYield = 0;
 		totalPerformance = 0;
@@ -263,9 +233,9 @@ async function updateTotals() {
 	}
 	
 	try {
-		totalValue = await calculateTotalValue();
-		totalYield = await calculateTotalYield();
-		totalPerformance = await calculateTotalPerformance();
+		totalValue = await portfolioCalculationService.calculateTotalValue(sortedAssets, totalCurrency);
+		totalYield = await portfolioCalculationService.calculateTotalYield(sortedAssets, totalCurrency);
+		totalPerformance = await portfolioCalculationService.calculateTotalPerformance(sortedAssets, totalCurrency);
 	} catch (error) {
 		console.error('Error updating totals:', error);
 	}
@@ -333,16 +303,29 @@ async function handleRefreshAllPrices() {
 	refreshResult = null;
 	
 	try {
+		console.log('Refreshing all asset prices...');
+		
+		// Use the backend refresh-all endpoint
 		refreshResult = await refreshAllPrices();
+		
+		// Then fetch the updated prices for our frontend state
+		await fetchAllCurrentPrices();
+		
 		lastRefreshTime = new Date();
 		// Trigger re-render of price components by incrementing trigger
 		refreshTrigger += 1;
-		// Fetch updated prices for sorting
-		await fetchAllCurrentPrices();
+		
 		// Reload cache status after refresh with a small delay to ensure cache is updated
 		setTimeout(async () => {
 			await reloadCacheStatus();
-		}, 1000);
+		}, 1500);
+		
+		console.log('Price refresh completed successfully:', refreshResult);
+		
+		// Show success message if there were errors
+		if (refreshResult.errors > 0) {
+			console.warn(`Refresh completed with ${refreshResult.errors} errors:`, refreshResult.error_details);
+		}
 	} catch (error) {
 		console.error('Failed to refresh prices:', error);
 		alert('Failed to refresh prices. Please try again.');
@@ -365,157 +348,6 @@ function formatLastRefresh(date: Date | null): string {
 	if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
 	
 	return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-// Aggregation functions for summary row - only calculate when prices are loaded
-async function calculateTotalValue(): Promise<number> {
-	if (!pricesLoaded) {
-		console.log('Prices not loaded yet, skipping total calculation');
-		return 0;
-	}
-	
-	console.log('=== assetPrices Map contents ===');
-	console.log('assetPrices Map size:', assetPrices.size);
-	console.log('assetPrices Map entries:', Array.from(assetPrices.entries()));
-	console.log('=== end assetPrices Map contents ===');
-	
-	const { convertCurrency } = await import('$lib/services/api');
-	let total = 0;
-	
-	for (const asset of sortedAssets) {
-		let value = 0;
-		
-		if (asset.type === 'cash') {
-			// Cash - assume it's already in EUR, convert if needed
-			value = asset.quantity;
-			if (totalCurrency !== 'EUR') {
-				const conversion = await convertCurrency('EUR', totalCurrency, value, false);
-				value = conversion.converted;
-			}
-		} else {
-			const currentPrice = getCurrentPrice(asset);
-			if (currentPrice > 0) {
-				const rawValue = currentPrice * asset.quantity;
-				
-				// Get the currency of the price and convert to selected total currency
-				const priceData = assetPrices.get(asset.id);
-				const priceCurrency = priceData?.currency || 'USD';
-				
-				if (priceCurrency !== totalCurrency) {
-					const conversion = await convertCurrency(priceCurrency, totalCurrency, rawValue, false);
-					value = conversion.converted;
-				} else {
-					value = rawValue;
-				}
-			}
-		}
-		
-		console.log(`Value calc - Asset: ${asset.symbol || asset.name}, Type: ${asset.type}, CurrentPrice: ${getCurrentPrice(asset)}, Quantity: ${asset.quantity}, Value in ${totalCurrency}: ${value.toFixed(2)}`);
-		total += value;
-	}
-	
-	console.log(`Total Value in ${totalCurrency}: ${total.toFixed(2)}`);
-	return total;
-}
-
-async function calculateTotalYield(): Promise<number> {
-	if (!pricesLoaded) {
-		return 0;
-	}
-	
-	const { convertCurrency } = await import('$lib/services/api');
-	let total = 0;
-	
-	for (const asset of sortedAssets) {
-		let yield_ = 0;
-		
-		if (asset.type === 'cash') {
-			yield_ = 0; // Cash has no yield
-		} else {
-			const currentPrice = getCurrentPrice(asset);
-			const purchasePrice = asset.purchase_price;
-			
-			if (currentPrice > 0 && purchasePrice && purchasePrice > 0) {
-				const currentValue = currentPrice * asset.quantity;
-				const investmentValue = purchasePrice * asset.quantity;
-				let yieldValue = currentValue - investmentValue;
-				
-				// Convert to selected total currency
-				const priceData = assetPrices.get(asset.id);
-				const priceCurrency = priceData?.currency || 'USD';
-				
-				if (priceCurrency !== totalCurrency) {
-					const conversion = await convertCurrency(priceCurrency, totalCurrency, yieldValue, false);
-					yieldValue = conversion.converted;
-				}
-				
-				yield_ = yieldValue;
-			}
-		}
-		
-		console.log(`Yield calc - Asset: ${asset.symbol || asset.name}, Type: ${asset.type}, CurrentPrice: ${getCurrentPrice(asset)}, PurchasePrice: ${asset.purchase_price}, Quantity: ${asset.quantity}, Yield in ${totalCurrency}: ${yield_.toFixed(2)}`);
-		total += yield_;
-	}
-	
-	console.log(`Total Yield in ${totalCurrency}: ${total.toFixed(2)}`);
-	return total;
-}
-
-async function calculateTotalPerformance(): Promise<number> {
-	if (!pricesLoaded) {
-		return 0;
-	}
-	
-	// Calculate total current value and total investment
-	let totalCurrentValue = 0;
-	let totalInvestment = 0;
-	
-	const { convertCurrency } = await import('$lib/services/api');
-	
-	for (const asset of sortedAssets) {
-		if (asset.type === 'cash') {
-			// Cash doesn't contribute to performance calculation
-			continue;
-		}
-		
-		const currentPrice = getCurrentPrice(asset);
-		const purchasePrice = asset.purchase_price;
-		
-		if (currentPrice > 0 && purchasePrice && purchasePrice > 0) {
-			let currentValue = currentPrice * asset.quantity;
-			let investmentValue = purchasePrice * asset.quantity;
-			
-			// Convert both values to the selected total currency
-			const priceData = assetPrices.get(asset.id);
-			const priceCurrency = priceData?.currency || 'USD';
-			
-			if (priceCurrency !== totalCurrency) {
-				const currentConversion = await convertCurrency(priceCurrency, totalCurrency, currentValue, false);
-				currentValue = currentConversion.converted;
-			}
-			
-			// For investment value, assume same currency as current price for simplicity
-			// (In reality, you might want to store the original purchase currency)
-			if (priceCurrency !== totalCurrency) {
-				const investmentConversion = await convertCurrency(priceCurrency, totalCurrency, investmentValue, false);
-				investmentValue = investmentConversion.converted;
-			}
-			
-			totalCurrentValue += currentValue;
-			totalInvestment += investmentValue;
-			
-			console.log(`Performance calc - Asset: ${asset.symbol}, Current Value: ${currentValue.toFixed(2)} ${totalCurrency}, Investment: ${investmentValue.toFixed(2)} ${totalCurrency}`);
-		}
-	}
-	
-	if (totalInvestment === 0) {
-		console.log(`Total Performance: 0% (no investments)`);
-		return 0;
-	}
-	
-	const performancePercent = ((totalCurrentValue - totalInvestment) / totalInvestment) * 100;
-	console.log(`Total Performance: ${performancePercent.toFixed(2)}% (Current: ${totalCurrentValue.toFixed(2)} ${totalCurrency}, Investment: ${totalInvestment.toFixed(2)} ${totalCurrency})`);
-	return performancePercent;
 }
 
 // Initial setup is handled in the main onMount above
@@ -564,11 +396,14 @@ async function calculateTotalPerformance(): Promise<number> {
 		<div class="flex items-center gap-4">
 			<button 
 				on:click={handleRefreshAllPrices} 
-				disabled={true}
-				class="bg-gray-500 opacity-50 text-white font-bold py-2 px-4 rounded border border-gray-500 cursor-not-allowed"
-				title="Refresh all asset prices (temporarily disabled)"
+				disabled={isRefreshing}
+				class="bg-primary hover:opacity-80 disabled:opacity-50 text-white font-bold p-2 rounded border border-primary disabled:cursor-not-allowed flex items-center justify-center"
+				title="Refresh Assetprices"
+				aria-label="Refresh Assetprices"
 			>
-				Refresh Prices (Disabled)
+				<svg class="w-5 h-5" class:animate-spin={isRefreshing} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+				</svg>
 			</button>
 			<button on:click={openAddModal} class="bg-gold hover:opacity-80 text-white font-bold py-2 px-4 rounded">
 				Add Asset
@@ -669,7 +504,7 @@ async function calculateTotalPerformance(): Promise<number> {
 </th>
 <th class="font-bold text-right px-4 py-3 border-r border-gray-600 cursor-pointer hover:bg-surface transition-colors" on:click={() => handleSort('performance')}>
 	<div class="flex items-center justify-end">
-		Performance (%)
+		Performance
 		{#if sortField === 'performance'}
 			<span class="ml-2 text-primary">
 				{sortDirection === 'asc' ? '↑' : '↓'}
@@ -723,7 +558,7 @@ async function calculateTotalPerformance(): Promise<number> {
 </td>
 <td class="px-4 py-3 border-r border-gray-600 text-right">
 	{#if asset.type === 'cash'}
-		{asset.quantity.toFixed(2)} {asset.currency}
+		{formatCurrency(asset.quantity, asset.currency ?? 'EUR')}
 	{:else if asset.type === 'stock' || asset.type === 'crypto'}
 		<ValueCell 
 			symbol={asset.symbol ?? ''} 
@@ -740,12 +575,12 @@ async function calculateTotalPerformance(): Promise<number> {
 										{#if asset.type === 'cash'}
 											-
 										{:else}
-											{asset.quantity}
+											{formatNumber(asset.quantity)}
 										{/if}
 									</td>
 									<td class="px-4 py-3 border-r border-gray-600 text-right">
 										{#if asset.purchase_price}
-											{asset.purchase_price.toFixed(2)} {asset.buy_currency ?? asset.currency ?? ''}
+											{formatCurrency(asset.purchase_price, asset.buy_currency ?? asset.currency ?? '')}
 										{:else}
 											-
 										{/if}
@@ -811,18 +646,18 @@ async function calculateTotalPerformance(): Promise<number> {
 								<td class="px-4 py-3 border-r border-gray-600 text-center">-</td>
 								<td class="px-4 py-3 border-r border-gray-600 text-center">-</td>
 								<td class="px-4 py-3 border-r border-gray-600 text-right text-gold font-bold text-lg">
-									{totalValue.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {totalCurrency}
+									{formatCurrency(totalValue, totalCurrency)}
 								</td>
 								<td class="px-4 py-3 border-r border-gray-600 text-center">-</td>
 								<td class="px-4 py-3 border-r border-gray-600 text-center">-</td>
 								<td class="px-4 py-3 border-r border-gray-600 text-right">
 									<span class={totalPerformance >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}>
-										{totalPerformance >= 0 ? '+' : ''}{totalPerformance.toFixed(2)}%
+										{formatPercentage(totalPerformance)}
 									</span>
 								</td>
 								<td class="px-4 py-3 border-r border-gray-600 text-right">
 									<span class={totalYield >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}>
-										{totalYield >= 0 ? '+' : ''}{totalYield.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {totalCurrency}
+										{formatCurrency(totalYield, totalCurrency)}
 									</span>
 								</td>
 								<td class="px-4 py-3 text-center">-</td>

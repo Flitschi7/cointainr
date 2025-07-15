@@ -150,57 +150,81 @@ async def refresh_all_prices(db: AsyncSession = db_dep):
     """
     from app.crud import crud_asset
     from app.models.asset import AssetType
+    from sqlalchemy.orm import selectinload
+    from sqlalchemy import select
+    from app.models.asset import Asset
 
-    assets = await crud_asset.get_assets(db=db, skip=0, limit=1000)  # Get all assets
-    results = []
-    errors = []
+    try:
+        # Get all assets with explicit loading to avoid lazy loading issues
+        stmt = select(Asset)
+        result = await db.execute(stmt)
+        assets = result.scalars().all()
 
-    for asset in assets:
-        # Extract asset data while in async context to avoid lazy loading issues
-        asset_id = asset.id
-        asset_symbol = asset.symbol
-        asset_type = asset.type
-
-        try:
-            if asset_type == AssetType.STOCK and asset_symbol:
-                result = await price_service.get_stock_price(
-                    db=db, identifier=asset_symbol, force_refresh=True
-                )
-                results.append(
-                    {
-                        "asset_id": asset_id,
-                        "symbol": asset_symbol,
-                        "type": "stock",
-                        "price": result["price"],
-                        "currency": result["currency"],
-                        "source": result["source"],
-                    }
-                )
-            elif asset_type == AssetType.CRYPTO and asset_symbol:
-                result = await price_service.get_crypto_price(
-                    db=db, symbol=asset_symbol, force_refresh=True
-                )
-                results.append(
-                    {
-                        "asset_id": asset_id,
-                        "symbol": asset_symbol,
-                        "type": "crypto",
-                        "price": result["price"],
-                        "currency": result["currency"],
-                        "source": result["source"],
-                    }
-                )
-        except Exception as e:
-            errors.append(
-                {"asset_id": asset_id, "symbol": asset_symbol, "error": str(e)}
+        # Extract all asset data immediately while in the database session
+        asset_data_list = []
+        for asset in assets:
+            asset_data_list.append(
+                {"id": asset.id, "symbol": asset.symbol, "type": asset.type}
             )
 
-    return {
-        "refreshed": len(results),
-        "errors": len(errors),
-        "results": results,
-        "error_details": errors,
-    }
+        results = []
+        errors = []
+
+        # Process each asset using the extracted data
+        for asset_data in asset_data_list:
+            try:
+                asset_id = asset_data["id"]
+                asset_symbol = asset_data["symbol"]
+                asset_type = asset_data["type"]
+
+                if asset_type == AssetType.STOCK and asset_symbol:
+                    result = await price_service.get_stock_price(
+                        db=db, identifier=asset_symbol, force_refresh=True
+                    )
+                    results.append(
+                        {
+                            "asset_id": asset_id,
+                            "symbol": asset_symbol,
+                            "type": "stock",
+                            "price": result["price"],
+                            "currency": result["currency"],
+                            "source": result["source"],
+                        }
+                    )
+                elif asset_type == AssetType.CRYPTO and asset_symbol:
+                    result = await price_service.get_crypto_price(
+                        db=db, symbol=asset_symbol, force_refresh=True
+                    )
+                    results.append(
+                        {
+                            "asset_id": asset_id,
+                            "symbol": asset_symbol,
+                            "type": "crypto",
+                            "price": result["price"],
+                            "currency": result["currency"],
+                            "source": result["source"],
+                        }
+                    )
+            except Exception as e:
+                # Use the extracted data for error reporting
+                errors.append(
+                    {
+                        "asset_id": asset_data.get("id", "unknown"),
+                        "symbol": asset_data.get("symbol", "unknown"),
+                        "error": str(e),
+                    }
+                )
+
+        return {
+            "refreshed": len(results),
+            "errors": len(errors),
+            "results": results,
+            "error_details": errors,
+        }
+
+    except Exception as e:
+        # Handle any database-level errors
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @router.delete("/cache")
