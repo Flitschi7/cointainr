@@ -151,6 +151,63 @@ class PriceService:
         Returns:
             Dict with symbol, price, currency, and cache info
         """
+        # Map common crypto symbols to CoinGecko IDs
+        symbol_mapping = {
+            "BTC": "bitcoin",
+            "ETH": "ethereum",
+            "ADA": "cardano",
+            "DOT": "polkadot",
+            "LINK": "chainlink",
+            "LTC": "litecoin",
+            "XRP": "ripple",
+            "BCH": "bitcoin-cash",
+            "BNB": "binancecoin",
+            "SOL": "solana",
+            "MATIC": "matic-network",
+            "AVAX": "avalanche-2",
+            "ATOM": "cosmos",
+            "ALGO": "algorand",
+            "XLM": "stellar",
+            "VET": "vechain",
+            "ICP": "internet-computer",
+            "FIL": "filecoin",
+            "TRX": "tron",
+            "ETC": "ethereum-classic",
+            "THETA": "theta-token",
+            "XMR": "monero",
+            "EOS": "eos",
+            "AAVE": "aave",
+            "MKR": "maker",
+            "COMP": "compound-governance-token",
+            "UNI": "uniswap",
+            "SUSHI": "sushi",
+            "YFI": "yearn-finance",
+            "SNX": "havven",
+            "CRV": "curve-dao-token",
+            "1INCH": "1inch",
+            "BAL": "balancer",
+            "ZRX": "0x",
+            "REN": "republic-protocol",
+            "KNC": "kyber-network-crystal",
+            "LRC": "loopring",
+            "BAND": "band-protocol",
+            "STORJ": "storj",
+            "BAT": "basic-attention-token",
+            "ZIL": "zilliqa",
+            "ENJ": "enjincoin",
+            "MANA": "decentraland",
+            "SAND": "the-sandbox",
+            "GALA": "gala",
+            "CHZ": "chiliz",
+            "FLOW": "flow",
+            "AXS": "axie-infinity",
+            "DOGE": "dogecoin",
+            "SHIB": "shiba-inu",
+        }
+
+        # Get CoinGecko ID for the symbol
+        coingecko_id = symbol_mapping.get(symbol.upper(), symbol.lower())
+
         # Check cache first (unless force refresh)
         if not force_refresh:
             cached_price = await crud_price_cache.get_cached_price(
@@ -172,14 +229,14 @@ class PriceService:
         # Fetch fresh data from CoinGecko
         try:
             async with httpx.AsyncClient() as client:
-                # Use CoinGecko API (free tier)
-                url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd"
+                # Use CoinGecko API (free tier) with proper ID mapping
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={coingecko_id}&vs_currencies=usd"
                 response = await client.get(url)
 
                 if response.status_code == 200:
                     data = response.json()
-                    if symbol.lower() in data and "usd" in data[symbol.lower()]:
-                        price = data[symbol.lower()]["usd"]
+                    if coingecko_id in data and "usd" in data[coingecko_id]:
+                        price = data[coingecko_id]["usd"]
                         currency = "USD"
                         source = "coingecko"
 
