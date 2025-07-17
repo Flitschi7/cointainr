@@ -6,9 +6,10 @@ export class PriceManagementService {
 	private pricesLoaded = false;
 
 	async fetchAllCurrentPrices(
-		assets: Asset[]
+		assets: Asset[],
+		forceRefresh: boolean = false
 	): Promise<Map<number, { price: number; currency: string }>> {
-		console.log('=== fetchAllCurrentPrices START ===');
+		console.log(`=== fetchAllCurrentPrices START (forceRefresh: ${forceRefresh}) ===`);
 		console.log('allAssets:', assets);
 		console.log(
 			'Non-cash assets to fetch prices for:',
@@ -19,14 +20,16 @@ export class PriceManagementService {
 			const pricePromises = assets
 				.filter((asset) => asset.type !== 'cash') // Skip cash assets
 				.map(async (asset) => {
-					console.log(`Fetching price for asset: ${asset.symbol}, type: ${asset.type}`);
+					console.log(
+						`Fetching price for asset: ${asset.symbol}, type: ${asset.type}, forceRefresh: ${forceRefresh}`
+					);
 					try {
 						let priceData;
-						// Use the same API functions that ValueCell uses
+						// Use the same API functions that ValueCell uses, respecting forceRefresh parameter
 						if (asset.type === 'crypto') {
-							priceData = await getCryptoPrice(asset.symbol || '', false);
+							priceData = await getCryptoPrice(asset.symbol || '', forceRefresh);
 						} else if (asset.type === 'stock') {
-							priceData = await getStockPrice(asset.symbol || '', false);
+							priceData = await getStockPrice(asset.symbol || '', forceRefresh);
 						}
 
 						console.log(`Price data for ${asset.symbol}:`, priceData);

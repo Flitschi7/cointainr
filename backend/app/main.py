@@ -4,6 +4,7 @@ from app.db.session import engine, Base
 
 from app.api.endpoints import assets
 from app.api.endpoints import price
+from app.services.scheduled_tasks import scheduled_task_manager
 
 # Import models to ensure they are registered with SQLAlchemy
 from app.models import asset
@@ -42,10 +43,23 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     async def startup_event():
         """
-        On application startup, create database tables if they do not exist.
+        On application startup, create database tables if they do not exist
+        and start scheduled tasks.
         """
+        # Create database tables
         async with engine.begin() as conn:
             await conn.run_sync(metadata.create_all)
+
+        # Start scheduled tasks
+        await scheduled_task_manager.start_scheduled_tasks()
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """
+        On application shutdown, stop scheduled tasks.
+        """
+        # Stop scheduled tasks
+        await scheduled_task_manager.stop_scheduled_tasks()
 
     @app.get("/")
     def read_root():

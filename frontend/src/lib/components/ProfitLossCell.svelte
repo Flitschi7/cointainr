@@ -12,31 +12,41 @@ export let currency: string;
 export let assetType: 'stock' | 'crypto';
 export let refreshTrigger: number = 0;
 export let displayType: 'percentage' | 'absolute' = 'percentage';
+export let showCacheStatus: boolean = false; // Whether to show cache status indicator
 
 let currentPrice: number | null = null;
 let profitLoss: number | null = null;
 let profitLossPercentage: number | null = null;
 let isLoading = true;
 let error: string | null = null;
+let isCached: boolean = false; // Track if the current data is from cache
 
 onMount(async () => {
     if (browser && purchasePrice) {
-        await fetchPriceAndCalculate();
+        // Use cached data for initial load (forceRefresh = false)
+        await fetchPriceAndCalculate(false);
     }
 });
 
 // Watch for refresh trigger changes
 let lastRefreshTrigger = 0;
 $: if (browser && refreshTrigger > lastRefreshTrigger && purchasePrice) {
-    fetchPriceAndCalculate();
+    // When refresh trigger is incremented, it means a manual refresh was triggered
+    // In this case, we should use the cached data that was just refreshed by the refresh-all endpoint
+    // We don't need to force refresh here because the cache was already updated
+    fetchPriceAndCalculate(false);
     lastRefreshTrigger = refreshTrigger;
 }
 
-async function fetchPriceAndCalculate() {
+async function fetchPriceAndCalculate(shouldForceRefresh: boolean = false) {
     if (!purchasePrice) {
         isLoading = false;
         return;
     }
+
+    // Store previous values for fallback in case of errors
+    const previousProfitLoss = profitLoss;
+    const previousProfitLossPercentage = profitLossPercentage;
 
     try {
         isLoading = true;
@@ -44,20 +54,23 @@ async function fetchPriceAndCalculate() {
         
         let priceData: PriceResponse;
         
+        // Respect cache by default, only force refresh when explicitly requested
         if (assetType === 'stock') {
-            priceData = await getStockPrice(symbol, false);
+            priceData = await getStockPrice(symbol, shouldForceRefresh);
         } else {
-            priceData = await getCryptoPrice(symbol, false);
+            priceData = await getCryptoPrice(symbol, shouldForceRefresh);
         }
         
-        if (priceData.price !== undefined) {
+        // Check if we got valid price data
+        if (priceData && priceData.price !== undefined) {
             currentPrice = priceData.price;
             
             // Convert current price to purchase currency if needed
             let convertedCurrentPrice = currentPrice;
             if (priceData.currency && priceData.currency !== currency) {
                 try {
-                    const conversionData = await convertCurrency(priceData.currency, currency, currentPrice);
+                    // Respect cache for currency conversion too
+                    const conversionData = await convertCurrency(priceData.currency, currency, currentPrice, shouldForceRefresh);
                     if (conversionData.converted !== undefined) {
                         convertedCurrentPrice = conversionData.converted;
                     }
@@ -72,12 +85,35 @@ async function fetchPriceAndCalculate() {
             
             profitLoss = totalCurrentValue - totalPurchaseValue;
             profitLossPercentage = ((convertedCurrentPrice - purchasePrice) / purchasePrice) * 100;
+            
+            // Add cache status information to the component
+            isCached = priceData.cached === true;
+            console.debug(`${symbol} profit/loss calculation: ${isCached ? 'Using cached data' : 'Using fresh data'}`);
         } else {
             error = 'Failed to get price';
         }
-    } catch (e) {
-        error = 'Error calculating profit/loss';
-        console.error('Error calculating profit/loss:', e);
+    } catch (e: any) {
+        // If we have previous values, keep them and just show a warning
+        if (previousProfitLoss !== null && previousProfitLossPercentage !== null) {
+            profitLoss = previousProfitLoss;
+            profitLossPercentage = previousProfitLossPercentage;
+            isCached = true; // Mark as cached since we're using previous value
+            
+            // Provide more detailed error information
+            const errorMessage = e.message || 'Unknown error';
+            const errorSource = errorMessage.includes('network') ? 'Network error' : 
+                               errorMessage.includes('timeout') ? 'API timeout' : 
+                               'API error';
+            
+            console.warn(`Using cached profit/loss values for ${symbol} due to ${errorSource}:`, errorMessage);
+            
+            // Set a non-blocking error that won't prevent display but will show in tooltip
+            error = `Using cached data. ${errorSource}: ${errorMessage}`;
+        } else {
+            // No previous value to fall back to
+            error = 'Error calculating profit/loss';
+            console.error('Error calculating profit/loss:', e);
+        }
     } finally {
         isLoading = false;
     }
@@ -108,9 +144,37 @@ $: displayValue = displayType === 'percentage' ? profitLossPercentage : profitLo
 {:else if isLoading}
     <span class="text-gray-400">...</span>
 {:else if error}
-    <span class="text-loss text-sm">Error</span>
+    <span class="text-loss text-sm" title={error}>Error</span>
 {:else}
-    <span class={getColorClass(displayValue)}>
-        {formatValue(displayValue)}
+    <span class="profit-loss-cell">
+        <span class={getColorClass(displayValue)}>
+            {formatValue(displayValue)}
+        </span>
+        {#if showCacheStatus}
+            <span class="cache-indicator" class:cached={isCached} class:fresh={!isCached} title={isCached ? 'Using cached data' : 'Using fresh data'}>
+                {isCached ? '•' : '•'}
+            </span>
+        {/if}
     </span>
 {/if}
+
+<style>
+    .profit-loss-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .cache-indicator {
+        font-size: 1.2em;
+        line-height: 1;
+    }
+    
+    .cached {
+        color: #f59e0b; /* Amber-500 */
+    }
+    
+    .fresh {
+        color: #10b981; /* Emerald-500 */
+    }
+</style>

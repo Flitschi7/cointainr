@@ -114,13 +114,18 @@ async def cleanup_old_cache_entries(db: AsyncSession, max_age_days: int = 30):
     """
     cutoff_time = datetime.utcnow() - timedelta(days=max_age_days)
 
-    result = await db.execute(
-        select(PriceCache).where(PriceCache.fetched_at < cutoff_time)
-    )
+    # Use a more efficient batch delete operation
+    from sqlalchemy import delete
+
+    # Count entries to be deleted first
+    count_query = select(PriceCache).where(PriceCache.fetched_at < cutoff_time)
+    result = await db.execute(count_query)
     old_entries = result.scalars().all()
+    count = len(old_entries)
 
-    for entry in old_entries:
-        await db.delete(entry)
-
+    # Execute batch delete
+    delete_query = delete(PriceCache).where(PriceCache.fetched_at < cutoff_time)
+    await db.execute(delete_query)
     await db.commit()
-    return len(old_entries)
+
+    return count
