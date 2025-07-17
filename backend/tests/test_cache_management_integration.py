@@ -2,7 +2,7 @@ import pytest
 import time
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from app.database import get_db
+from app.db.database import get_db
 from app.services.cache_management import CacheManagementService
 from app.services.price_service import PriceService
 from app.services.conversion_service import ConversionService
