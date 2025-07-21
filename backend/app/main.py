@@ -4,6 +4,9 @@ import os
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import pathlib
 from app.db.session import engine, Base
 from app.core.error_handling import setup_exception_handlers
 from app.core.logging_config import configure_logging
@@ -130,13 +133,38 @@ def create_app() -> FastAPI:
         performance.router, prefix="/api/v1/performance", tags=["performance"]
     )
 
-    @app.get("/")
-    def read_root():
-        """
-        Root endpoint for the Cointainr API.
-        Returns a welcome message.
-        """
-        return {"message": "Welcome to the Cointainr Backend!"}
+    # Mount static files from the frontend build
+    static_dir = pathlib.Path("/app/static")
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+        @app.get("/")
+        def read_root():
+            """
+            Serve the frontend SPA
+            """
+            index_path = static_dir / "client" / "index.html"
+            if index_path.exists():
+                return FileResponse(str(index_path))
+            return {"message": "Welcome to the Cointainr Backend!"}
+
+        @app.get("/{full_path:path}")
+        def serve_spa(full_path: str):
+            """
+            Serve SPA routes - catch all routes and return the index.html
+            """
+            # First check if the path exists as a static file
+            requested_path = static_dir / "client" / full_path
+            if requested_path.exists() and requested_path.is_file():
+                return FileResponse(str(requested_path))
+
+            # Otherwise return index.html for SPA routing
+            index_path = static_dir / "client" / "index.html"
+            if index_path.exists():
+                return FileResponse(str(index_path))
+
+            # Fallback
+            return {"message": "Welcome to the Cointainr Backend!"}
 
     return app
 

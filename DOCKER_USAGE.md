@@ -5,8 +5,10 @@
 ### 1. Download docker-compose.yml
 
 ```bash
-curl -O https://raw.githubusercontent.com/yourusername/cointainr/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/flitschi7/cointainr/main/docker-compose.yml
 ```
+
+This docker-compose file is configured to use the beta image: `ghcr.io/flitschi7/cointainr:beta`
 
 ### 2. Edit API Keys
 
@@ -58,9 +60,15 @@ docker-compose logs -f
 # Stop the application
 docker-compose down
 
-# Update to latest image
+# Update to latest beta image
 docker-compose pull
 docker-compose up -d
+
+# Switch to stable release (if needed)
+# First edit docker-compose.yml to change:
+# image: ghcr.io/flitschi7/cointainr:beta
+# to:
+# image: ghcr.io/flitschi7/cointainr:latest
 
 # Restart the application
 docker-compose restart

@@ -2,9 +2,7 @@ version: "3.8"
 
 services:
   cointainr:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/flitschi7/cointainr:beta
     container_name: cointainr
     restart: unless-stopped
     ports:
