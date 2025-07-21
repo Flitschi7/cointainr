@@ -133,19 +133,66 @@ def create_app() -> FastAPI:
         performance.router, prefix="/api/v1/performance", tags=["performance"]
     )
 
+    # Debug endpoint to check what files exist
+    @app.get("/debug/files")
+    def debug_files():
+        """Debug endpoint to check what files exist in the static directory"""
+        static_dir = pathlib.Path("/app/static")
+        files_info = {
+            "static_dir_exists": static_dir.exists(),
+            "static_dir_contents": [],
+            "client_dir_exists": False,
+            "client_dir_contents": [],
+        }
+
+        if static_dir.exists():
+            try:
+                files_info["static_dir_contents"] = [
+                    str(f) for f in static_dir.iterdir()
+                ]
+
+                client_dir = static_dir / "client"
+                if client_dir.exists():
+                    files_info["client_dir_exists"] = True
+                    files_info["client_dir_contents"] = [
+                        str(f) for f in client_dir.rglob("*")
+                    ][
+                        :50
+                    ]  # Limit to 50 files
+            except Exception as e:
+                files_info["error"] = str(e)
+
+        return files_info
+
     # Mount static files from the frontend build
     static_dir = pathlib.Path("/app/static")
     client_dir = static_dir / "client"
 
-    if client_dir.exists():
-        # Mount the client directory for static assets
-        app.mount(
-            "/_app", StaticFiles(directory=str(client_dir / "_app")), name="static_app"
-        )
+    # Try different possible locations for the frontend files
+    possible_frontend_dirs = [
+        client_dir,  # /app/static/client (SvelteKit default)
+        static_dir,  # /app/static (if copied directly)
+        static_dir / "build",  # /app/static/build (adapter-static)
+    ]
+
+    frontend_dir = None
+    for dir_path in possible_frontend_dirs:
+        if dir_path.exists():
+            frontend_dir = dir_path
+            logger.info(f"Found frontend files in: {frontend_dir}")
+            break
+
+    if frontend_dir:
+        # Mount the frontend directory for static assets
+        app_assets_dir = frontend_dir / "_app"
+        if app_assets_dir.exists():
+            app.mount(
+                "/_app", StaticFiles(directory=str(app_assets_dir)), name="static_app"
+            )
 
         # Serve favicon and other static files
-        for static_file in client_dir.glob("*.*"):
-            if static_file.is_file():
+        for static_file in frontend_dir.glob("*.*"):
+            if static_file.is_file() and static_file.name != "index.html":
 
                 @app.get(f"/{static_file.name}")
                 def serve_static_file(static_file=static_file):
@@ -157,15 +204,20 @@ def create_app() -> FastAPI:
             Serve the frontend SPA
             """
             # Try to find index.html
-            for index_file in [
-                client_dir / "index.html",
-                client_dir / "_app" / "immutable" / "entry" / "start.js",
-            ]:
-                if index_file.exists():
-                    return FileResponse(str(index_file))
+            index_path = frontend_dir / "index.html"
+            if index_path.exists():
+                return FileResponse(str(index_path))
 
-            # Fallback to API message
-            return {"message": "Welcome to the Cointainr Backend!"}
+            # Fallback to API message with debug info
+            return {
+                "message": "Welcome to the Cointainr Backend!",
+                "debug": {
+                    "frontend_dir": str(frontend_dir),
+                    "index_path": str(index_path),
+                    "index_exists": index_path.exists(),
+                    "hint": "Visit /debug/files to see what files are available",
+                },
+            }
 
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str, request: Request):
@@ -177,22 +229,38 @@ def create_app() -> FastAPI:
                 return {"message": "API endpoint not found", "path": full_path}
 
             # First check if the path exists as a static file
-            requested_path = client_dir / full_path
+            requested_path = frontend_dir / full_path
             if requested_path.exists() and requested_path.is_file():
                 return FileResponse(str(requested_path))
 
             # Check in _app directory
-            app_path = client_dir / "_app" / full_path
+            app_path = frontend_dir / "_app" / full_path
             if app_path.exists() and app_path.is_file():
                 return FileResponse(str(app_path))
 
             # Otherwise return index.html for SPA routing
-            index_path = client_dir / "index.html"
+            index_path = frontend_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
 
             # Fallback
-            return {"message": "Welcome to the Cointainr Backend!"}
+            return {
+                "message": "File not found",
+                "path": full_path,
+                "frontend_dir": str(frontend_dir),
+            }
+
+    else:
+        logger.warning("No frontend files found in any expected location")
+
+        @app.get("/")
+        def read_root():
+            return {
+                "message": "Welcome to the Cointainr Backend!",
+                "error": "Frontend files not found",
+                "checked_paths": [str(d) for d in possible_frontend_dirs],
+                "hint": "Visit /debug/files to see what files are available",
+            }
 
     return app
 
