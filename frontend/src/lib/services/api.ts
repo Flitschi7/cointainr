@@ -1,4 +1,12 @@
-import type { Asset } from '$lib/types';
+import type {
+	Asset,
+	PriceResponse,
+	ConversionResponse,
+	ConversionRateResponse,
+	CacheStats,
+	RefreshAllResponse,
+	AssetCacheStatus
+} from '$lib/types';
 
 const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
 
@@ -62,75 +70,6 @@ export async function updateAsset(
 		throw new Error('Failed to update asset');
 	}
 	return await response.json();
-}
-
-// --- Price API Service ---
-
-export interface PriceResponse {
-	symbol: string;
-	price: number;
-	currency: string;
-	cached?: boolean;
-	fetched_at?: string;
-	source?: string;
-}
-
-export interface ConversionResponse {
-	from: string;
-	to: string;
-	amount: number;
-	converted: number;
-	rate: number;
-	cached?: boolean;
-	fetched_at?: string;
-	source?: string;
-	last_update?: string;
-	next_update?: string;
-}
-
-export interface ConversionRateResponse {
-	from: string;
-	to: string;
-	rate: number;
-	cached?: boolean;
-	fetched_at?: string;
-	source?: string;
-	last_update?: string;
-	next_update?: string;
-}
-
-export interface CacheStats {
-	total_entries: number;
-	fresh_entries: number;
-	stock_entries: number;
-	crypto_entries: number;
-	cache_age_minutes: number;
-}
-
-export interface RefreshAllResponse {
-	refreshed: number;
-	errors: number;
-	results: Array<{
-		asset_id: number;
-		symbol: string;
-		type: string;
-		price: number;
-		currency: string;
-		source: string;
-	}>;
-	error_details: Array<{
-		asset_id: number;
-		symbol: string;
-		error: string;
-	}>;
-}
-
-export interface AssetCacheStatus {
-	asset_id: number;
-	symbol: string;
-	type: string;
-	cached_at: string | null;
-	cache_ttl_minutes: number;
 }
 
 /**

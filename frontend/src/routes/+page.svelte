@@ -2,9 +2,14 @@
 	import ValueCell from '$lib/components/ValueCell.svelte';
 	import CacheStatusIndicator from '$lib/components/CacheStatusIndicator.svelte';
 	import ProfitLossCell from '$lib/components/ProfitLossCell.svelte';
-	import { refreshAllPrices, getAssetCacheStatus, getStockPrice, getCryptoPrice, convertCurrency } from '$lib/services/api';
+	import CacheStatusBanner from '$lib/components/CacheStatusBanner.svelte';
+	import CurrencyRateDisplay from '$lib/components/CurrencyRateDisplay.svelte';
+	import { refreshAllPrices } from '$lib/services/api';
+	import * as enhancedApi from '$lib/services/enhancedApi';
 	import type { Asset } from '$lib/types';
-	import type { RefreshAllResponse, AssetCacheStatus } from '$lib/services/api';
+	import type { RefreshAllResponse, AssetCacheStatus } from '$lib/types';
+	import { refreshAssetCacheStatus } from '$lib/stores/assetStatusStore';
+	import { getContext } from 'svelte';
 	import AddAssetForm from '$lib/components/AddAssetForm.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 	import { PriceManagementService } from '$lib/services/priceManagement';
@@ -22,6 +27,15 @@
 	let refreshResult: RefreshAllResponse | null = null;
 	let refreshTrigger = 0;
 	let cacheStatusMap: Map<number, AssetCacheStatus> = new Map();
+
+	// Get cache status from context (provided by CacheStatusProvider)
+	const cacheContext = getContext('cacheStatus') as { assetCacheStatus: any } | undefined;
+
+	// Extract the store from context at the top level
+	let contextAssetCacheStatus: any = null;
+	if (cacheContext) {
+		contextAssetCacheStatus = cacheContext.assetCacheStatus;
+	}
 
 	// Use loaded data from the load function
 	let allAssets: Asset[] = data.assets || [];
@@ -60,8 +74,19 @@
 		}
 	}
 
-	// Initialize cache status map
-	$: if (data.cacheStatus && data.cacheStatus.length > 0) {
+	// Initialize cache status map from context store
+	$: if (
+		contextAssetCacheStatus &&
+		$contextAssetCacheStatus &&
+		$contextAssetCacheStatus.length > 0
+	) {
+		const newMap = new Map();
+		$contextAssetCacheStatus.forEach((status: AssetCacheStatus) => {
+			newMap.set(status.asset_id, status);
+		});
+		cacheStatusMap = newMap;
+	} else if (data.cacheStatus && data.cacheStatus.length > 0) {
+		// Fallback to initial data if context is not available
 		const newMap = new Map();
 		data.cacheStatus.forEach((status: AssetCacheStatus) => {
 			newMap.set(status.asset_id, status);
@@ -91,6 +116,13 @@
 	const priceManagementService = new PriceManagementService();
 	let portfolioCalculationService: PortfolioCalculationService;
 
+	// Initialize the price management service with loaded prices
+	$: if (assetPrices.size > 0 && !priceManagementService.isPricesLoaded()) {
+		// Set the prices in the service
+		priceManagementService.setPrices(assetPrices);
+		console.log(`Initialized PriceManagementService with ${assetPrices.size} prices`);
+	}
+
 	// Helper function to get current price for an asset
 	function getCurrentPrice(asset: Asset): number {
 		if (asset.type === 'cash') {
@@ -115,25 +147,22 @@
 		try {
 			const symbol = asset.symbol || '';
 			const currency = asset.buy_currency || asset.currency || 'USD';
-			
+
 			if (!symbol) return 0;
 
-			// Get price data using the same API as components
-			let priceData;
-			if (asset.type === 'crypto') {
-				priceData = await getCryptoPrice(symbol, false);
-			} else if (asset.type === 'stock') {
-				priceData = await getStockPrice(symbol, false);
-			}
+			// Use enhanced API with cache-first approach
+			const priceData = await enhancedApi.getPrice(symbol, asset.type, { forceRefresh: false });
 
 			if (!priceData || !priceData.price) return 0;
 
 			let price = priceData.price;
 			let priceCurrency = priceData.currency || 'USD';
 
-			// Convert to asset currency if needed
+			// Convert to total currency if needed using cache-first approach
 			if (currency && currency !== priceCurrency) {
-				const conversionData = await convertCurrency(priceCurrency, currency, price, false);
+				const conversionData = await enhancedApi.convertCurrency(priceCurrency, currency, price, {
+					forceRefresh: false
+				});
 				price = conversionData.converted;
 			}
 
@@ -153,31 +182,31 @@
 		try {
 			const symbol = asset.symbol || '';
 			const currency = asset.buy_currency || asset.currency || 'USD';
-			
+
 			if (!symbol) return 0;
 
-			// Get price data using the same API as components
-			let priceData;
-			if (asset.type === 'crypto') {
-				priceData = await getCryptoPrice(symbol, false);
-			} else if (asset.type === 'stock') {
-				priceData = await getStockPrice(symbol, false);
-			}
+			// Use enhanced API with cache-first approach
+			const priceData = await enhancedApi.getPrice(symbol, asset.type, { forceRefresh: false });
 
 			if (!priceData || !priceData.price) return 0;
 
 			let currentPrice = priceData.price;
 			let priceCurrency = priceData.currency || 'USD';
 
-			// Convert to asset currency if needed
+			// Convert to asset currency if needed using cache-first approach
 			if (currency && currency !== priceCurrency) {
-				const conversionData = await convertCurrency(priceCurrency, currency, currentPrice, false);
+				const conversionData = await enhancedApi.convertCurrency(
+					priceCurrency,
+					currency,
+					currentPrice,
+					{ forceRefresh: false }
+				);
 				currentPrice = conversionData.converted;
 			}
 
 			const totalCurrentValue = currentPrice * asset.quantity;
 			const totalPurchaseValue = asset.purchase_price * asset.quantity;
-			
+
 			return totalCurrentValue - totalPurchaseValue;
 		} catch (error) {
 			console.error(`Error calculating profit/loss for ${asset.symbol}:`, error);
@@ -194,25 +223,25 @@
 		try {
 			const symbol = asset.symbol || '';
 			const currency = asset.buy_currency || asset.currency || 'USD';
-			
+
 			if (!symbol) return 0;
 
-			// Get price data using the same API as components
-			let priceData;
-			if (asset.type === 'crypto') {
-				priceData = await getCryptoPrice(symbol, false);
-			} else if (asset.type === 'stock') {
-				priceData = await getStockPrice(symbol, false);
-			}
+			// Use enhanced API with cache-first approach
+			const priceData = await enhancedApi.getPrice(symbol, asset.type, { forceRefresh: false });
 
 			if (!priceData || !priceData.price) return 0;
 
 			let currentPrice = priceData.price;
 			let priceCurrency = priceData.currency || 'USD';
 
-			// Convert to asset currency if needed
+			// Convert to asset currency if needed using cache-first approach
 			if (currency && currency !== priceCurrency) {
-				const conversionData = await convertCurrency(priceCurrency, currency, currentPrice, false);
+				const conversionData = await enhancedApi.convertCurrency(
+					priceCurrency,
+					currency,
+					currentPrice,
+					{ forceRefresh: false }
+				);
 				currentPrice = conversionData.converted;
 			}
 
@@ -224,12 +253,13 @@
 	}
 
 	// Cache for calculated values to avoid repeated API calls during sorting
-	let calculatedValues: Map<number, { value: number; profitLoss: number; performance: number }> = new Map();
+	let calculatedValues: Map<number, { value: number; profitLoss: number; performance: number }> =
+		new Map();
 
 	// Function to calculate all values for sorting
 	async function calculateAllValuesForSorting(assets: Asset[]): Promise<void> {
 		console.log('Calculating all values for sorting...');
-		
+
 		const calculations = assets.map(async (asset) => {
 			if (asset.type === 'cash') {
 				calculatedValues.set(asset.id, {
@@ -447,13 +477,32 @@
 
 			console.log(`Processing ${sortedAssets.length} assets for totals`);
 
-			// Process each asset
+			// Process each asset and convert to total currency
 			for (const asset of sortedAssets) {
 				// Handle cash assets
 				if (asset.type === 'cash') {
-					// For cash, just add the quantity directly
-					const cashValue = asset.quantity || 0;
-					console.log(`Cash asset ${asset.name}: ${cashValue} ${asset.currency}`);
+					let cashValue = asset.quantity || 0;
+					const assetCurrency = asset.currency || 'USD';
+
+					// Convert cash to total currency if needed
+					if (assetCurrency !== totalCurrency) {
+						try {
+							const conversionData = await enhancedApi.convertCurrency(
+								assetCurrency,
+								totalCurrency,
+								cashValue,
+								{ forceRefresh: false }
+							);
+							cashValue = conversionData.converted;
+						} catch (error) {
+							console.error(`Failed to convert ${assetCurrency} to ${totalCurrency}:`, error);
+							// Use original value if conversion fails
+						}
+					}
+
+					console.log(
+						`Cash asset ${asset.name}: ${cashValue} ${totalCurrency} (from ${asset.quantity} ${assetCurrency})`
+					);
 					sumValue += cashValue;
 					continue;
 				}
@@ -463,10 +512,28 @@
 					// Get the current price from the price management service
 					const currentPrice = getCurrentPrice(asset);
 					const quantity = asset.quantity || 0;
-					const currentValue = currentPrice * quantity;
+					let currentValue = currentPrice * quantity;
+
+					// The price should already be in the correct currency from the price service
+					// But let's ensure it's converted to total currency if needed
+					const assetCurrency = asset.buy_currency || asset.currency || 'USD';
+					if (assetCurrency !== totalCurrency) {
+						try {
+							const conversionData = await enhancedApi.convertCurrency(
+								assetCurrency,
+								totalCurrency,
+								currentValue,
+								{ forceRefresh: false }
+							);
+							currentValue = conversionData.converted;
+						} catch (error) {
+							console.error(`Failed to convert ${assetCurrency} to ${totalCurrency}:`, error);
+							// Use original value if conversion fails
+						}
+					}
 
 					console.log(
-						`${asset.type} asset ${asset.symbol}: Price=${currentPrice}, Quantity=${quantity}, Value=${currentValue}`
+						`${asset.type} asset ${asset.symbol}: Price=${currentPrice}, Quantity=${quantity}, Value=${currentValue} ${totalCurrency}`
 					);
 
 					// Add to total value
@@ -474,11 +541,32 @@
 
 					// Calculate yield if purchase price is available
 					if (asset.purchase_price && asset.purchase_price > 0) {
-						const purchaseValue = asset.purchase_price * quantity;
+						let purchaseValue = asset.purchase_price * quantity;
+
+						// Convert purchase value to total currency if needed
+						const purchaseCurrency = asset.buy_currency || asset.currency || 'USD';
+						if (purchaseCurrency !== totalCurrency) {
+							try {
+								const conversionData = await enhancedApi.convertCurrency(
+									purchaseCurrency,
+									totalCurrency,
+									purchaseValue,
+									{ forceRefresh: false }
+								);
+								purchaseValue = conversionData.converted;
+							} catch (error) {
+								console.error(
+									`Failed to convert purchase value from ${purchaseCurrency} to ${totalCurrency}:`,
+									error
+								);
+								// Use original value if conversion fails
+							}
+						}
+
 						const assetYield = currentValue - purchaseValue;
 
 						console.log(
-							`  Purchase: ${asset.purchase_price}, PurchaseValue: ${purchaseValue}, Yield: ${assetYield}`
+							`  Purchase: ${asset.purchase_price} ${purchaseCurrency}, PurchaseValue: ${purchaseValue} ${totalCurrency}, Yield: ${assetYield} ${totalCurrency}`
 						);
 
 						sumYield += assetYield;
@@ -540,12 +628,8 @@
 
 	async function reloadCacheStatus() {
 		try {
-			const cacheStatuses = await getAssetCacheStatus();
-			const newMap = new Map();
-			cacheStatuses.forEach((status) => {
-				newMap.set(status.asset_id, status);
-			});
-			cacheStatusMap = newMap;
+			// Use the centralized cache store refresh function
+			await refreshAssetCacheStatus();
 		} catch (error) {
 			console.error('Failed to reload cache status:', error);
 		}
@@ -585,11 +669,11 @@
 			lastRefreshTime = new Date();
 		}
 
-		// Force a refresh of all prices to ensure we have the latest data
+		// Use cache-first approach on page load
 		if (allAssets.length > 0) {
-			console.log('Fetching all prices on page load');
-			// Force refresh to ensure we have the latest data
-			await fetchAllCurrentPrices(true);
+			console.log('Fetching all prices on page load with cache-first approach');
+			// Don't force refresh, use cache-first approach
+			await fetchAllCurrentPrices(false);
 
 			// Update totals after prices are loaded
 			await updateTotals();
@@ -597,6 +681,9 @@
 
 		// Set up the adaptive cache polling
 		setupAdaptiveCachePolling();
+
+		// Initialize the cache status
+		await enhancedApi.getFrontendCacheStats();
 	});
 
 	onDestroy(() => {
@@ -614,8 +701,8 @@
 		try {
 			console.log('Manually refreshing all asset prices (bypassing cache)...');
 
-			// Use the backend refresh-all endpoint with force_refresh=true to bypass cache
-			refreshResult = await refreshAllPrices();
+			// Use the enhanced API to refresh all prices
+			refreshResult = await enhancedApi.refreshAllPrices();
 
 			// Then fetch the updated prices for our frontend state
 			// Explicitly force refresh to bypass cache completely
@@ -628,6 +715,8 @@
 			// Reload cache status after refresh with a small delay to ensure cache is updated
 			setTimeout(async () => {
 				await reloadCacheStatus();
+				// Also update frontend cache stats
+				await enhancedApi.getFrontendCacheStats();
 			}, 1500);
 
 			console.log('Manual price refresh completed successfully:', refreshResult);
@@ -715,6 +804,8 @@
 		<h1 class="font-headline text-gold text-4xl">Cointainr</h1>
 	</header>
 
+	<CacheStatusBanner {lastRefreshTime} />
+
 	<section class="bg-surface mb-8 flex items-center justify-between rounded-lg p-4">
 		<div class="flex items-center gap-4">
 			<input
@@ -747,6 +838,9 @@
 					<option value="GBP">GBP</option>
 					<option value="CHF">CHF</option>
 				</select>
+
+				<!-- Compact Currency Rate Display -->
+				<CurrencyRateDisplay baseCurrency={totalCurrency} assets={allAssets} />
 			</div>
 		</div>
 		<div class="flex items-center gap-4">

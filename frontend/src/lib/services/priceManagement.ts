@@ -1,5 +1,5 @@
 import type { Asset } from '$lib/types';
-import { getStockPrice, getCryptoPrice } from './api';
+import * as enhancedApi from './enhancedApi';
 
 export class PriceManagementService {
 	private assetPrices: Map<number, { price: number; currency: string }> = new Map();
@@ -25,12 +25,14 @@ export class PriceManagementService {
 					);
 					try {
 						let priceData;
-						// Use the same API functions that ValueCell uses, respecting forceRefresh parameter
-						if (asset.type === 'crypto') {
-							priceData = await getCryptoPrice(asset.symbol || '', forceRefresh);
-						} else if (asset.type === 'stock') {
-							priceData = await getStockPrice(asset.symbol || '', forceRefresh);
-						}
+						// Use the enhanced API with cache-first approach
+						priceData = await enhancedApi.getPrice(
+							asset.symbol || '',
+							asset.type as 'stock' | 'crypto',
+							{
+								forceRefresh
+							}
+						);
 
 						console.log(`Price data for ${asset.symbol}:`, priceData);
 
@@ -91,6 +93,12 @@ export class PriceManagementService {
 
 	isPricesLoaded(): boolean {
 		return this.pricesLoaded;
+	}
+
+	setPrices(prices: Map<number, { price: number; currency: string }>): void {
+		this.assetPrices = new Map(prices);
+		this.pricesLoaded = true;
+		console.log(`PriceManagementService: Set ${this.assetPrices.size} prices`);
 	}
 
 	updatePrices(newPrices: Map<number, { price: number; currency: string }>): void {

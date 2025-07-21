@@ -1,9 +1,10 @@
 <script lang="ts">
 	import {
 		cacheStatusService,
-		type AssetCacheStatus,
 		CacheStatusType
 	} from '$lib/services/cacheStatus';
+	import type { AssetCacheStatus } from '$lib/types';
+	import { getContext } from 'svelte';
 
 	export let cachedAt: string | null;
 	export let cacheTtlMinutes: number;
@@ -12,8 +13,17 @@
 	export let showExpirationTime: boolean = false;
 	export let showLabel: boolean = false;
 
+	// Get cache status from context (provided by CacheStatusProvider)
+	const cacheContext = getContext('cacheStatus') as { assetCacheStatus: any } | undefined;
+	
 	// Enhanced cache status object
 	let cacheStatus: AssetCacheStatus | null = null;
+	
+	// Get the store from context at the top level
+	let assetCacheStatusStore: any = null;
+	if (cacheContext) {
+		assetCacheStatusStore = cacheContext.assetCacheStatus;
+	}
 
 	// Calculate freshness on frontend to handle timezone properly
 	function isActuallyFresh(
@@ -138,20 +148,9 @@
 		}
 	}
 
-	// Load cache status if assetId is provided
-	async function loadCacheStatus() {
-		if (assetId !== null) {
-			try {
-				cacheStatus = await cacheStatusService.getCacheStatusForAsset(assetId);
-			} catch (error) {
-				console.error('Failed to load cache status:', error);
-			}
-		}
-	}
-
-	// Initial load and refresh when assetId changes
-	$: if (assetId !== null) {
-		loadCacheStatus();
+	// Get cache status from the centralized store
+	$: if (assetCacheStatusStore && $assetCacheStatusStore && assetId !== null) {
+		cacheStatus = $assetCacheStatusStore.find((status: AssetCacheStatus) => status.asset_id === assetId) || null;
 	}
 
 	$: actuallyFresh = isActuallyFresh(cachedAt, cacheTtlMinutes, assetType);

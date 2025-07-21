@@ -1,5 +1,5 @@
 import type { Asset } from '$lib/types';
-import { convertCurrency } from './api';
+import * as enhancedApi from './enhancedApi';
 
 export interface PortfolioTotals {
 	totalValue: number;
@@ -26,40 +26,84 @@ export class PortfolioCalculationService {
 	async calculateTotalValue(assets: Asset[], targetCurrency: string): Promise<number> {
 		let total = 0;
 
-		for (const asset of assets) {
+		// Prepare batch conversion data
+		const amounts: number[] = [];
+		const fromCurrencies: string[] = [];
+		const toCurrencies: string[] = [];
+		const assetIndices: number[] = [];
+
+		// First pass: collect all conversion requests
+		for (let i = 0; i < assets.length; i++) {
+			const asset = assets[i];
 			let value = 0;
+			let currency = '';
 
 			if (asset.type === 'cash') {
-				// Cash - assume it's in EUR, convert if needed
+				// Cash - assume it's in EUR
 				value = asset.quantity;
-				if (targetCurrency !== 'EUR') {
-					const conversion = await convertCurrency('EUR', targetCurrency, value, false);
-					value = conversion.converted;
-				}
+				currency = 'EUR';
 			} else {
 				const currentPrice = this.getCurrentPrice(asset);
 				if (currentPrice > 0) {
-					const rawValue = currentPrice * asset.quantity;
-
-					// Get the currency of the price and convert to target currency
+					value = currentPrice * asset.quantity;
+					// Get the currency of the price
 					const priceData = this.assetPrices.get(asset.id);
-					const priceCurrency = priceData?.currency || 'USD';
-
-					if (priceCurrency !== targetCurrency) {
-						const conversion = await convertCurrency(
-							priceCurrency,
-							targetCurrency,
-							rawValue,
-							false
-						);
-						value = conversion.converted;
-					} else {
-						value = rawValue;
-					}
+					currency = priceData?.currency || 'USD';
+				} else {
+					continue; // Skip assets with no price
 				}
 			}
 
-			total += value;
+			// If currency is different from target, add to batch conversion
+			if (currency !== targetCurrency) {
+				amounts.push(value);
+				fromCurrencies.push(currency);
+				toCurrencies.push(targetCurrency);
+				assetIndices.push(i);
+			} else {
+				// No conversion needed, add directly to total
+				total += value;
+			}
+		}
+
+		// Second pass: perform batch conversion if needed
+		if (amounts.length > 0) {
+			try {
+				// Use batch conversion for better performance
+				const conversions = await enhancedApi.batchConvertCurrency(
+					amounts,
+					fromCurrencies,
+					toCurrencies,
+					{ forceRefresh: false }
+				);
+
+				// Add converted values to total
+				conversions.forEach((conversion) => {
+					total += conversion.converted;
+				});
+			} catch (error) {
+				console.error('Error in batch currency conversion:', error);
+
+				// Fallback to individual conversions if batch fails
+				for (let i = 0; i < amounts.length; i++) {
+					try {
+						const conversion = await enhancedApi.convertCurrency(
+							fromCurrencies[i],
+							toCurrencies[i],
+							amounts[i],
+							{ forceRefresh: false }
+						);
+						total += conversion.converted;
+					} catch (convError) {
+						console.error(
+							`Error converting ${fromCurrencies[i]} to ${toCurrencies[i]}:`,
+							convError
+						);
+						// Add unconverted amount as fallback
+						total += amounts[i];
+					}
+				}
+			}
 		}
 
 		return total;
@@ -68,37 +112,79 @@ export class PortfolioCalculationService {
 	async calculateTotalYield(assets: Asset[], targetCurrency: string): Promise<number> {
 		let total = 0;
 
+		// Prepare batch conversion data
+		const amounts: number[] = [];
+		const fromCurrencies: string[] = [];
+		const toCurrencies: string[] = [];
+
+		// First pass: collect all yield values that need conversion
 		for (const asset of assets) {
-			let yield_ = 0;
-
-			if (asset.type !== 'cash') {
-				const currentPrice = this.getCurrentPrice(asset);
-				const purchasePrice = asset.purchase_price;
-
-				if (currentPrice > 0 && purchasePrice && purchasePrice > 0) {
-					const currentValue = currentPrice * asset.quantity;
-					const investmentValue = purchasePrice * asset.quantity;
-					let yieldValue = currentValue - investmentValue;
-
-					// Convert to target currency
-					const priceData = this.assetPrices.get(asset.id);
-					const priceCurrency = priceData?.currency || 'USD';
-
-					if (priceCurrency !== targetCurrency) {
-						const conversion = await convertCurrency(
-							priceCurrency,
-							targetCurrency,
-							yieldValue,
-							false
-						);
-						yieldValue = conversion.converted;
-					}
-
-					yield_ = yieldValue;
-				}
+			if (asset.type === 'cash') {
+				continue; // Cash doesn't contribute to yield
 			}
 
-			total += yield_;
+			const currentPrice = this.getCurrentPrice(asset);
+			const purchasePrice = asset.purchase_price;
+
+			if (currentPrice > 0 && purchasePrice && purchasePrice > 0) {
+				const currentValue = currentPrice * asset.quantity;
+				const investmentValue = purchasePrice * asset.quantity;
+				const yieldValue = currentValue - investmentValue;
+
+				// Get the currency of the price
+				const priceData = this.assetPrices.get(asset.id);
+				const priceCurrency = priceData?.currency || 'USD';
+
+				// If currency is different from target, add to batch conversion
+				if (priceCurrency !== targetCurrency) {
+					amounts.push(yieldValue);
+					fromCurrencies.push(priceCurrency);
+					toCurrencies.push(targetCurrency);
+				} else {
+					// No conversion needed, add directly to total
+					total += yieldValue;
+				}
+			}
+		}
+
+		// Second pass: perform batch conversion if needed
+		if (amounts.length > 0) {
+			try {
+				// Use batch conversion for better performance
+				const conversions = await enhancedApi.batchConvertCurrency(
+					amounts,
+					fromCurrencies,
+					toCurrencies,
+					{ forceRefresh: false }
+				);
+
+				// Add converted values to total
+				conversions.forEach((conversion) => {
+					total += conversion.converted;
+				});
+			} catch (error) {
+				console.error('Error in batch currency conversion for yields:', error);
+
+				// Fallback to individual conversions if batch fails
+				for (let i = 0; i < amounts.length; i++) {
+					try {
+						const conversion = await enhancedApi.convertCurrency(
+							fromCurrencies[i],
+							toCurrencies[i],
+							amounts[i],
+							{ forceRefresh: false }
+						);
+						total += conversion.converted;
+					} catch (convError) {
+						console.error(
+							`Error converting yield from ${fromCurrencies[i]} to ${toCurrencies[i]}:`,
+							convError
+						);
+						// Add unconverted amount as fallback
+						total += amounts[i];
+					}
+				}
+			}
 		}
 
 		return total;
@@ -108,6 +194,13 @@ export class PortfolioCalculationService {
 		let totalCurrentValue = 0;
 		let totalInvestment = 0;
 
+		// Prepare batch conversion data for current values
+		const currentAmounts: number[] = [];
+		const investmentAmounts: number[] = [];
+		const fromCurrencies: string[] = [];
+		const toCurrencies: string[] = [];
+
+		// First pass: collect all values that need conversion
 		for (const asset of assets) {
 			if (asset.type === 'cash') {
 				continue; // Cash doesn't contribute to performance calculation
@@ -117,33 +210,84 @@ export class PortfolioCalculationService {
 			const purchasePrice = asset.purchase_price;
 
 			if (currentPrice > 0 && purchasePrice && purchasePrice > 0) {
-				let currentValue = currentPrice * asset.quantity;
-				let investmentValue = purchasePrice * asset.quantity;
+				const currentValue = currentPrice * asset.quantity;
+				const investmentValue = purchasePrice * asset.quantity;
 
-				// Convert both values to the target currency
+				// Get the currency of the price
 				const priceData = this.assetPrices.get(asset.id);
 				const priceCurrency = priceData?.currency || 'USD';
 
+				// If currency is different from target, add to batch conversion
 				if (priceCurrency !== targetCurrency) {
-					const currentConversion = await convertCurrency(
-						priceCurrency,
-						targetCurrency,
-						currentValue,
-						false
-					);
-					currentValue = currentConversion.converted;
-
-					const investmentConversion = await convertCurrency(
-						priceCurrency,
-						targetCurrency,
-						investmentValue,
-						false
-					);
-					investmentValue = investmentConversion.converted;
+					currentAmounts.push(currentValue);
+					investmentAmounts.push(investmentValue);
+					fromCurrencies.push(priceCurrency);
+					toCurrencies.push(targetCurrency);
+				} else {
+					// No conversion needed, add directly to totals
+					totalCurrentValue += currentValue;
+					totalInvestment += investmentValue;
 				}
+			}
+		}
 
-				totalCurrentValue += currentValue;
-				totalInvestment += investmentValue;
+		// Second pass: perform batch conversion if needed
+		if (currentAmounts.length > 0) {
+			try {
+				// Use batch conversion for current values
+				const currentConversions = await enhancedApi.batchConvertCurrency(
+					currentAmounts,
+					fromCurrencies,
+					toCurrencies,
+					{ forceRefresh: false }
+				);
+
+				// Use batch conversion for investment values
+				const investmentConversions = await enhancedApi.batchConvertCurrency(
+					investmentAmounts,
+					fromCurrencies,
+					toCurrencies,
+					{ forceRefresh: false }
+				);
+
+				// Add converted values to totals
+				for (let i = 0; i < currentConversions.length; i++) {
+					totalCurrentValue += currentConversions[i].converted;
+					totalInvestment += investmentConversions[i].converted;
+				}
+			} catch (error) {
+				console.error('Error in batch currency conversion for performance calculation:', error);
+
+				// Fallback to individual conversions if batch fails
+				for (let i = 0; i < currentAmounts.length; i++) {
+					try {
+						// Convert current value
+						const currentConversion = await enhancedApi.convertCurrency(
+							fromCurrencies[i],
+							toCurrencies[i],
+							currentAmounts[i],
+							{ forceRefresh: false }
+						);
+						totalCurrentValue += currentConversion.converted;
+
+						// Convert investment value
+						const investmentConversion = await enhancedApi.convertCurrency(
+							fromCurrencies[i],
+							toCurrencies[i],
+							investmentAmounts[i],
+							{ forceRefresh: false }
+						);
+						totalInvestment += investmentConversion.converted;
+					} catch (convError) {
+						console.error(
+							`Error converting performance values from ${fromCurrencies[i]} to ${toCurrencies[i]}:`,
+							convError
+						);
+						// Add unconverted amounts as fallback
+						totalCurrentValue += currentAmounts[i];
+						totalInvestment += investmentAmounts[i];
+					}
+				}
 			}
 		}
 

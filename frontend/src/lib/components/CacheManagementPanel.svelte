@@ -6,8 +6,8 @@ import {
   conversionCacheStats, 
   lastCacheRefresh, 
   cacheRefreshInProgress, 
-  refreshCacheStatus 
 } from '$lib/stores/cacheStore';
+import { refreshAssetCacheStatus } from '$lib/stores/assetStatusStore';
 import { cacheStatusService, CacheStatusType } from '$lib/services/cacheStatus';
 import { clearPriceCache, clearConversionCache, refreshAllPrices } from '$lib/services/api';
 import CacheHealthIndicator from './CacheHealthIndicator.svelte';
@@ -34,7 +34,7 @@ async function handleRefreshAllPrices(): Promise<void> {
     await refreshAllPrices();
     successMessage = 'Successfully refreshed all prices';
     // Refresh cache status after prices are refreshed
-    await refreshCacheStatus();
+    await refreshAssetCacheStatus();
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : 'Failed to refresh prices';
   } finally {
@@ -52,7 +52,7 @@ async function handleClearPriceCache(): Promise<void> {
     await clearPriceCache();
     successMessage = 'Successfully cleared price cache';
     // Refresh cache status after cache is cleared
-    await refreshCacheStatus();
+    await refreshAssetCacheStatus();
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : 'Failed to clear price cache';
   } finally {
@@ -70,7 +70,7 @@ async function handleClearConversionCache(): Promise<void> {
     await clearConversionCache();
     successMessage = 'Successfully cleared conversion cache';
     // Refresh cache status after cache is cleared
-    await refreshCacheStatus();
+    await refreshAssetCacheStatus();
   } catch (error) {
     errorMessage = error instanceof Error ? error.message : 'Failed to clear conversion cache';
   } finally {
@@ -93,7 +93,8 @@ $: if (errorMessage || successMessage) {
 
 // Initial load
 onMount(() => {
-  refreshCacheStatus();
+  // Note: Cache status is automatically managed by CacheStatusProvider
+  // No need to refresh here
 });
 </script>
 
@@ -180,7 +181,7 @@ onMount(() => {
     
     <button 
       class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600"
-      on:click={() => refreshCacheStatus()}
+      on:click={() => refreshAssetCacheStatus()}
       disabled={$cacheRefreshInProgress}
     >
       {$cacheRefreshInProgress ? 'Refreshing...' : 'Refresh Cache Status'}

@@ -1,17 +1,5 @@
 import { getAssetCacheStatus } from './api';
-
-/**
- * Enhanced cache status interface based on the design document
- */
-export interface AssetCacheStatus {
-	asset_id: number;
-	symbol: string;
-	type: string;
-	cached_at: string | null;
-	cache_ttl_minutes: number;
-	is_valid: boolean; // Indicates if cache is still valid
-	expires_at: string | null; // When cache expires
-}
+import type { AssetCacheStatus } from '$lib/types';
 
 /**
  * Cache status indicator types

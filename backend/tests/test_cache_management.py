@@ -45,6 +45,13 @@ class TestCacheManagementService:
         # Should be valid since it's within 15 minutes default
         assert self.service.is_price_cache_valid(mock_entry) is True
 
+        # Get cache status for detailed validation
+        status = self.service.get_cache_status(mock_entry, 15)
+        assert status["is_valid"] is True
+        assert status["cache_age_minutes"] >= 10
+        assert status["cache_age_minutes"] < 11
+        assert status["ttl_minutes"] == 15
+
         # Should be invalid when force_refresh is True
         assert (
             self.service.is_price_cache_valid(mock_entry, force_refresh=True) is False
@@ -58,6 +65,13 @@ class TestCacheManagementService:
 
         # Should be invalid since it's older than 15 minutes default
         assert self.service.is_price_cache_valid(mock_entry) is False
+
+        # Get cache status for detailed validation
+        status = self.service.get_cache_status(mock_entry, 15)
+        assert status["is_valid"] is False
+        assert status["cache_age_minutes"] >= 20
+        assert status["ttl_minutes"] == 15
+        assert status["expires_at"] < datetime.now(timezone.utc).isoformat()
 
         # Should also be invalid with force_refresh
         assert (
@@ -89,6 +103,21 @@ class TestCacheManagementService:
 
         # Should be valid since it's within 8 hours default
         assert self.service.is_conversion_cache_valid(mock_entry) is True
+
+        # Get cache status for detailed validation
+        status = self.service.get_cache_status(mock_entry, 8 * 60)  # 8 hours in minutes
+        assert status["is_valid"] is True
+        assert status["cache_age_minutes"] >= 4 * 60  # 4 hours in minutes
+        assert status["ttl_minutes"] == 8 * 60  # 8 hours in minutes
+
+        # Calculate expected expiration time (4 hours used + 4 hours remaining = 8 hours TTL)
+        expected_expiration = get_utc_now() + timedelta(hours=4)
+        # Convert both to strings for comparison to avoid microsecond differences
+        expected_exp_str = expected_expiration.strftime("%Y-%m-%dT%H:%M")
+        actual_exp_str = datetime.fromisoformat(status["expires_at"]).strftime(
+            "%Y-%m-%dT%H:%M"
+        )
+        assert expected_exp_str == actual_exp_str
 
         # Should be invalid when force_refresh is True
         assert (

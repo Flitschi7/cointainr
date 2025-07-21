@@ -1,4 +1,4 @@
-import type { PriceResponse, ConversionResponse, AssetCacheStatus } from '$lib/services/api';
+import type { PriceResponse, ConversionResponse, AssetCacheStatus } from '$lib/types';
 import { cacheStatusService, CacheStatusType } from '$lib/services/cacheStatus';
 
 /**

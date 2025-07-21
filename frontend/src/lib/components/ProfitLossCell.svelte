@@ -1,9 +1,14 @@
 <script lang="ts">
 import { onMount } from 'svelte';
 import { browser } from '$app/environment';
-import { getStockPrice, getCryptoPrice, convertCurrency } from '$lib/services/api';
-import type { PriceResponse } from '$lib/services/api';
+import type { PriceResponse, ConversionResponse } from '$lib/types';
 import { formatPercentage, formatCurrency } from '$lib/utils/numberFormat';
+import CacheIndicator from './CacheIndicator.svelte';
+import ErrorState from './ErrorState.svelte';
+import TransitionWrapper from './TransitionWrapper.svelte';
+import TableCellSkeleton from './TableCellSkeleton.svelte';
+import * as enhancedApi from '$lib/services/enhancedApi';
+import * as apiWithRetry from '$lib/services/apiWithRetry';
 
 export let symbol: string;
 export let quantity: number;
@@ -19,26 +24,58 @@ let profitLoss: number | null = null;
 let profitLossPercentage: number | null = null;
 let isLoading = true;
 let error: string | null = null;
+let errorDetails: string | null = null;
 let isCached: boolean = false; // Track if the current data is from cache
+let lastUpdated: string | null = null; // Track when the data was last updated
+let isStale: boolean = false; // Track if the cached data is stale
+let retryCount = 0;
+let maxRetries = 3;
+
+// Memoized values to prevent unnecessary calculations
+let formattedDisplayValue: string = '-';
+let displayColorClass: string = '';
+let cacheStatusProps = { isCached: false, lastUpdated: null, isStale: false };
+let displayValue: number | null = null;
+
+// Memoize the display value calculation
+$: displayValue = displayType === 'percentage' ? profitLossPercentage : profitLoss;
+
+// Memoize the formatted value calculation
+$: if (displayValue !== null) {
+    formattedDisplayValue = formatValue(displayValue);
+    displayColorClass = getColorClass(displayValue);
+} else {
+    formattedDisplayValue = '-';
+    displayColorClass = '';
+}
+
+// Memoize cache status props to prevent unnecessary object creation
+$: cacheStatusProps = {
+    isCached,
+    lastUpdated,
+    isStale
+};
 
 onMount(async () => {
     if (browser && purchasePrice) {
-        // Use cached data for initial load (forceRefresh = false)
+        // Use cache-first approach when component mounts
         await fetchPriceAndCalculate(false);
     }
 });
 
-// Watch for refresh trigger changes
+// Track the last refresh trigger to avoid duplicate fetches
 let lastRefreshTrigger = 0;
-$: if (browser && refreshTrigger > lastRefreshTrigger && purchasePrice) {
-    // When refresh trigger is incremented, it means a manual refresh was triggered
-    // In this case, we should use the cached data that was just refreshed by the refresh-all endpoint
-    // We don't need to force refresh here because the cache was already updated
-    fetchPriceAndCalculate(false);
+$: if (browser && refreshTrigger > 0 && refreshTrigger !== lastRefreshTrigger && purchasePrice) {
+    fetchPriceAndCalculate(true); // Force refresh when triggered manually
+}
+
+// Update the last refresh trigger when it changes
+$: if (refreshTrigger > lastRefreshTrigger) {
     lastRefreshTrigger = refreshTrigger;
 }
 
 async function fetchPriceAndCalculate(shouldForceRefresh: boolean = false) {
+    // Skip calculation if purchase price is not available
     if (!purchasePrice) {
         isLoading = false;
         return;
@@ -51,74 +88,117 @@ async function fetchPriceAndCalculate(shouldForceRefresh: boolean = false) {
     try {
         isLoading = true;
         error = null;
+        errorDetails = null;
         
-        let priceData: PriceResponse;
-        
-        // Respect cache by default, only force refresh when explicitly requested
-        if (assetType === 'stock') {
-            priceData = await getStockPrice(symbol, shouldForceRefresh);
-        } else {
-            priceData = await getCryptoPrice(symbol, shouldForceRefresh);
-        }
+        // Use the API with retry logic
+        const priceData = await apiWithRetry.getPrice(symbol, assetType, { 
+            forceRefresh: shouldForceRefresh 
+        });
         
         // Check if we got valid price data
         if (priceData && priceData.price !== undefined) {
             currentPrice = priceData.price;
             
+            // Get cache status information - only when needed
+            const cacheInfo = enhancedApi.getAssetCacheInfo(symbol, assetType);
+            isCached = cacheInfo.isCached;
+            isStale = !cacheInfo.isValid && cacheInfo.isCached;
+            lastUpdated = priceData.fetched_at || null;
+            
             // Convert current price to purchase currency if needed
             let convertedCurrentPrice = currentPrice;
             if (priceData.currency && priceData.currency !== currency) {
                 try {
-                    // Respect cache for currency conversion too
-                    const conversionData = await convertCurrency(priceData.currency, currency, currentPrice, shouldForceRefresh);
+                    // Use cache-first approach for currency conversion with retry
+                    const conversionData = await apiWithRetry.convertCurrency(
+                        priceData.currency, 
+                        currency, 
+                        currentPrice, 
+                        { forceRefresh: shouldForceRefresh }
+                    );
+                    
                     if (conversionData.converted !== undefined) {
                         convertedCurrentPrice = conversionData.converted;
                     }
                 } catch (convError) {
                     console.warn('Currency conversion failed, using original price:', convError);
+                    // Still continue with the original price
                 }
             }
             
-            // Calculate profit/loss
+            // Calculate profit/loss - only once with all data available
             const totalCurrentValue = convertedCurrentPrice * quantity;
             const totalPurchaseValue = purchasePrice * quantity;
             
             profitLoss = totalCurrentValue - totalPurchaseValue;
             profitLossPercentage = ((convertedCurrentPrice - purchasePrice) / purchasePrice) * 100;
             
-            // Add cache status information to the component
-            isCached = priceData.cached === true;
-            console.debug(`${symbol} profit/loss calculation: ${isCached ? 'Using cached data' : 'Using fresh data'}`);
+            // Only log in debug mode to reduce console noise
+            if (process.env.NODE_ENV !== 'production') {
+                console.debug(`${symbol} profit/loss calculation: ${isCached ? 'Using cached data' : 'Using fresh data'}`);
+            }
+            
+            retryCount = 0; // Reset retry count on success
         } else {
             error = 'Failed to get price';
         }
     } catch (e: any) {
-        // If we have previous values, keep them and just show a warning
-        if (previousProfitLoss !== null && previousProfitLossPercentage !== null) {
-            profitLoss = previousProfitLoss;
-            profitLossPercentage = previousProfitLossPercentage;
-            isCached = true; // Mark as cached since we're using previous value
-            
-            // Provide more detailed error information
-            const errorMessage = e.message || 'Unknown error';
-            const errorSource = errorMessage.includes('network') ? 'Network error' : 
-                               errorMessage.includes('timeout') ? 'API timeout' : 
-                               'API error';
-            
-            console.warn(`Using cached profit/loss values for ${symbol} due to ${errorSource}:`, errorMessage);
-            
-            // Set a non-blocking error that won't prevent display but will show in tooltip
-            error = `Using cached data. ${errorSource}: ${errorMessage}`;
-        } else {
-            // No previous value to fall back to
-            error = 'Error calculating profit/loss';
-            console.error('Error calculating profit/loss:', e);
-        }
+        handleError(e, previousProfitLoss, previousProfitLossPercentage);
     } finally {
         isLoading = false;
     }
 }
 
+function handleError(e: any, previousProfitLoss: number | null, previousProfitLossPercentage: number | null): void {
+    // If we have previous values, keep them and just show a warning
+    if (previousProfitLoss !== null && previousProfitLossPercentage !== null) {
+        profitLoss = previousProfitLoss;
+        profitLossPercentage = previousProfitLossPercentage;
+        isCached = true; // Mark as cached since we're using previous value
+        isStale = true;  // Mark as stale since we couldn't refresh
+        
+        // Provide more detailed error information
+        const errorMessage = e.message || 'Unknown error';
+        const originalMessage = e.originalMessage || errorMessage;
+        
+        // Determine error type for better user feedback
+        let errorSource = 'API error';
+        
+        if (e.isNetworkError || (originalMessage && originalMessage.includes('network'))) {
+            errorSource = 'Network error';
+        } else if (originalMessage && originalMessage.includes('timeout')) {
+            errorSource = 'API timeout';
+        } else if (e.category === 'rate-limit') {
+            errorSource = 'Rate limit exceeded';
+        } else if (e.status === 404) {
+            errorSource = 'Resource not found';
+        }
+        
+        console.warn(`Using cached profit/loss values for ${symbol} due to ${errorSource}:`, e);
+        
+        // Set a non-blocking error that won't prevent display but will show in tooltip
+        error = `Using cached data. ${errorSource}`;
+        errorDetails = originalMessage;
+    } else {
+        // No previous value to fall back to
+        error = 'Error calculating profit/loss';
+        errorDetails = e.originalMessage || e.message || 'Unable to calculate profit/loss';
+        console.error('Error calculating profit/loss:', e);
+    }
+}
+
+// Function to retry fetching with exponential backoff
+async function retryFetch() {
+    if (retryCount >= maxRetries) {
+        error = `Failed after ${maxRetries} retry attempts`;
+        return;
+    }
+    
+    retryCount++;
+    await fetchPriceAndCalculate(true);
+}
+
+// Memoized formatting function to prevent recalculation
 function formatValue(value: number | null): string {
     if (value === null) return '-';
     
@@ -129,33 +209,71 @@ function formatValue(value: number | null): string {
     }
 }
 
+// Memoized color class function to prevent recalculation
 function getColorClass(value: number | null): string {
     if (value === null) return '';
     if (value > 0) return 'text-profit';
     if (value < 0) return 'text-loss';
     return '';
 }
-
-$: displayValue = displayType === 'percentage' ? profitLossPercentage : profitLoss;
 </script>
 
 {#if !purchasePrice}
     <span class="text-gray-400">-</span>
-{:else if isLoading}
-    <span class="text-gray-400">...</span>
-{:else if error}
-    <span class="text-loss text-sm" title={error}>Error</span>
 {:else}
-    <span class="profit-loss-cell">
-        <span class={getColorClass(displayValue)}>
-            {formatValue(displayValue)}
-        </span>
-        {#if showCacheStatus}
-            <span class="cache-indicator" class:cached={isCached} class:fresh={!isCached} title={isCached ? 'Using cached data' : 'Using fresh data'}>
-                {isCached ? '•' : '•'}
+    <TransitionWrapper isLoading={isLoading} transitionType="fade" transitionDuration={150}>
+        <svelte:fragment slot="loading">
+            <TableCellSkeleton width="4rem" />
+        </svelte:fragment>
+        
+        {#if error && displayValue === null}
+            <ErrorState 
+                message="Error" 
+                details={errorDetails || error} 
+                severity="error" 
+                inline={true} 
+                onRetry={retryFetch} 
+            />
+        {:else if error && displayValue !== null}
+            <span class="profit-loss-cell">
+                <span class={getColorClass(displayValue)}>
+                    {formatValue(displayValue)}
+                </span>
+                <ErrorState 
+                    message="!" 
+                    details={error} 
+                    severity="warning" 
+                    inline={true} 
+                    showIcon={false} 
+                    onRetry={retryFetch} 
+                />
+                {#if showCacheStatus}
+                    <span class="ml-1">
+                        <CacheIndicator 
+                            isCached={isCached} 
+                            lastUpdated={lastUpdated}
+                            isStale={isStale}
+                        />
+                    </span>
+                {/if}
+            </span>
+        {:else}
+            <span class="profit-loss-cell">
+                <span class={getColorClass(displayValue)}>
+                    {formatValue(displayValue)}
+                </span>
+                {#if showCacheStatus}
+                    <span class="ml-1">
+                        <CacheIndicator 
+                            isCached={isCached} 
+                            lastUpdated={lastUpdated}
+                            isStale={isStale}
+                        />
+                    </span>
+                {/if}
             </span>
         {/if}
-    </span>
+    </TransitionWrapper>
 {/if}
 
 <style>
@@ -165,16 +283,24 @@ $: displayValue = displayType === 'percentage' ? profitLossPercentage : profitLo
         gap: 0.25rem;
     }
     
-    .cache-indicator {
-        font-size: 1.2em;
-        line-height: 1;
+    .text-gray-400 {
+        color: #9ca3af; /* Gray-400 */
+        opacity: 0.7;
     }
     
-    .cached {
-        color: #f59e0b; /* Amber-500 */
+    .text-loss {
+        color: #ef4444; /* Red-500 */
     }
     
-    .fresh {
+    .text-profit {
         color: #10b981; /* Emerald-500 */
+    }
+    
+    .ml-1 {
+        margin-left: 0.25rem;
+    }
+    
+    .text-sm {
+        font-size: 0.875rem;
     }
 </style>

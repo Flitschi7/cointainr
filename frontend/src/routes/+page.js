@@ -4,7 +4,7 @@ import {
 	getCacheStats,
 	getConversionCacheStats
 } from '$lib/services/api';
-import { initializeCacheStatus, refreshCacheStatus } from '$lib/stores/cacheStore';
+// Note: Cache management is now handled by CacheStatusProvider
 import { cacheStatusService } from '$lib/services/cacheStatus';
 import { getMultipleAssetPrices, getCachedConversionRate } from '$lib/utils/cacheOperations';
 
@@ -32,9 +32,8 @@ export async function load() {
 			};
 		});
 
-		// Initialize the cache store with the fetched data
-		// This ensures the cache status is available throughout the app
-		initializeCacheStatus();
+		// Note: Cache initialization is now handled by CacheStatusProvider
+		// No need to initialize the old cache store here
 
 		// Only load prices for non-cash assets to avoid unnecessary API calls
 		const pricedAssets = assets.filter((asset) => asset.type !== 'cash');
@@ -58,8 +57,8 @@ export async function load() {
 				apiCallCount = cacheValidityChecks.filter((check) => !check.hasValidCache).length;
 
 				// Only load prices if we have assets that need them
-				// Always respect cache during page load (forceRefresh = false)
-				// This will use cached data when valid and only make API calls when necessary
+				// On page load, NEVER force refresh - only use cached data from database
+				// Even if cache is stale, we use it. Only "Force Refresh" button should call external APIs
 				initialPrices = await getMultipleAssetPrices(pricedAssets, false);
 
 				console.log(

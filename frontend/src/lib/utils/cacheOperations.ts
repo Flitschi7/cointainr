@@ -1,7 +1,6 @@
 import { getStockPrice, getCryptoPrice, getConversionRate } from '$lib/services/api';
 import type { Asset } from '$lib/types';
-import { cacheStatusService } from '$lib/services/cacheStatus';
-import { refreshCacheStatus } from '$lib/stores/cacheStore';
+import { assetCacheStatus } from '$lib/stores/assetStatusStore';
 
 /**
  * Utility functions for cache-related operations
@@ -46,8 +45,7 @@ export async function getAssetPrice(
 			throw new Error(`Unsupported asset type: ${asset.type}`);
 		}
 
-		// After fetching price, refresh cache status
-		refreshCacheStatus();
+		// Note: Cache status will be automatically refreshed by CacheStatusProvider
 
 		// Ensure all required properties are present and have the correct types
 		return {
@@ -119,14 +117,12 @@ export async function getMultipleAssetPrices(
 		}%)`
 	);
 
-	// Process all assets in parallel, but respect cache for those with valid cache
+	// Process all assets in parallel
 	const pricePromises = assets.map(async (asset) => {
 		try {
-			// If forceRefresh is true, we ignore cache for all assets
-			// Otherwise, we only force refresh for assets with invalid cache
-			const needsRefresh = forceRefresh || assetsNeedingRefresh.some((a) => a.id === asset.id);
-
-			const priceData = await getAssetPrice(asset, needsRefresh);
+			// Only force refresh if explicitly requested
+			// On page load (forceRefresh = false), always use cached data even if stale
+			const priceData = await getAssetPrice(asset, forceRefresh);
 			return {
 				assetId: asset.id,
 				priceData
@@ -164,7 +160,14 @@ export async function getMultipleAssetPrices(
  */
 export async function isAssetCacheValid(assetId: number): Promise<boolean> {
 	try {
-		const cacheStatus = await cacheStatusService.getCacheStatusForAsset(assetId);
+		// Get current cache status from the centralized store
+		let currentStatuses: any[] = [];
+		const unsubscribe = assetCacheStatus.subscribe((value) => {
+			currentStatuses = value;
+		});
+		unsubscribe();
+
+		const cacheStatus = currentStatuses.find((status) => status.asset_id === assetId);
 		return cacheStatus?.is_valid || false;
 	} catch (error) {
 		console.error(`Failed to check cache validity for asset ${assetId}:`, error);
@@ -187,8 +190,7 @@ export async function getCachedConversionRate(
 	try {
 		const rateData = await getConversionRate(fromCurrency, toCurrency, forceRefresh);
 
-		// After fetching rate, refresh cache status
-		refreshCacheStatus();
+		// Note: Cache status will be automatically refreshed by CacheStatusProvider
 
 		// Ensure all required properties are present and have the correct types
 		return {

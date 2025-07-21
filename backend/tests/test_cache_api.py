@@ -13,7 +13,8 @@ class TestCacheAPI:
     Integration tests for the cache-related API endpoints.
     """
 
-    def test_get_asset_cache_status(self):
+    @pytest.mark.asyncio
+    async def test_get_asset_cache_status(self):
         """Test that the asset cache status endpoint returns valid data."""
         response = client.get("/api/v1/price/cache/asset-status")
         assert response.status_code == 200
@@ -31,7 +32,8 @@ class TestCacheAPI:
             assert "cached_at" in item
             assert "cache_ttl_minutes" in item
 
-    def test_get_cache_stats(self):
+    @pytest.mark.asyncio
+    async def test_get_cache_stats(self):
         """Test that the cache stats endpoint returns valid data."""
         response = client.get("/api/v1/price/cache/stats")
         assert response.status_code == 200
@@ -44,7 +46,8 @@ class TestCacheAPI:
         assert "crypto_entries" in data
         assert "cache_age_minutes" in data
 
-    def test_get_conversion_cache_stats(self):
+    @pytest.mark.asyncio
+    async def test_get_conversion_cache_stats(self):
         """Test that the conversion cache stats endpoint returns valid data."""
         response = client.get("/api/v1/conversion/cache/stats")
         assert response.status_code == 200
@@ -55,7 +58,8 @@ class TestCacheAPI:
         assert "fresh_entries" in data
         assert "cache_age_hours" in data
 
-    def test_clear_price_cache(self):
+    @pytest.mark.asyncio
+    async def test_clear_price_cache(self):
         """Test that the clear price cache endpoint works."""
         response = client.post("/api/v1/price/cache/clear")
         assert response.status_code == 200
@@ -66,7 +70,8 @@ class TestCacheAPI:
         assert data["success"] is True
         assert "cleared_entries" in data
 
-    def test_clear_conversion_cache(self):
+    @pytest.mark.asyncio
+    async def test_clear_conversion_cache(self):
         """Test that the clear conversion cache endpoint works."""
         response = client.post("/api/v1/conversion/cache/clear")
         assert response.status_code == 200
@@ -77,7 +82,8 @@ class TestCacheAPI:
         assert data["success"] is True
         assert "cleared_entries" in data
 
-    def test_refresh_all_prices_respects_force_refresh(self):
+    @pytest.mark.asyncio
+    async def test_refresh_all_prices_respects_force_refresh(self):
         """Test that the refresh-all endpoint respects the force_refresh parameter."""
         # First call without force_refresh
         response1 = client.post(
@@ -102,7 +108,8 @@ class TestCacheAPI:
         # since we're forcing refresh
         assert data2["cached"] <= data1["cached"]
 
-    def test_get_stock_price_respects_cache(self):
+    @pytest.mark.asyncio
+    async def test_get_stock_price_respects_cache(self):
         """Test that the stock price endpoint respects cache."""
         # First call to ensure we have cached data
         symbol = "AAPL"  # Use a common stock symbol
@@ -125,7 +132,8 @@ class TestCacheAPI:
         # Check that it didn't use cache
         assert data3["cached"] is False
 
-    def test_get_crypto_price_respects_cache(self):
+    @pytest.mark.asyncio
+    async def test_get_crypto_price_respects_cache(self):
         """Test that the crypto price endpoint respects cache."""
         # First call to ensure we have cached data
         symbol = "BTC"  # Use a common crypto symbol
@@ -148,7 +156,8 @@ class TestCacheAPI:
         # Check that it didn't use cache
         assert data3["cached"] is False
 
-    def test_get_conversion_rate_respects_cache(self):
+    @pytest.mark.asyncio
+    async def test_get_conversion_rate_respects_cache(self):
         """Test that the conversion rate endpoint respects cache."""
         # First call to ensure we have cached data
         from_currency = "USD"

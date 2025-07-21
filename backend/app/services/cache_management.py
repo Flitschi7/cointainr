@@ -91,10 +91,24 @@ class CacheManagementService:
 
         if not cached_entry or not hasattr(cached_entry, "fetched_at"):
             self._price_cache_misses += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("price", False)
+            except ImportError:
+                pass
             return False
 
         if not cached_entry.fetched_at:
             self._price_cache_misses += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("price", False)
+            except ImportError:
+                pass
             return False
 
         # Use environment variable for TTL calculation
@@ -105,8 +119,22 @@ class CacheManagementService:
         # Track cache hit/miss
         if is_valid:
             self._price_cache_hits += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("price", True)
+            except ImportError:
+                pass
         else:
             self._price_cache_misses += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("price", False)
+            except ImportError:
+                pass
 
         return is_valid
 
@@ -129,10 +157,24 @@ class CacheManagementService:
 
         if not cached_entry or not hasattr(cached_entry, "fetched_at"):
             self._conversion_cache_misses += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("conversion", False)
+            except ImportError:
+                pass
             return False
 
         if not cached_entry.fetched_at:
             self._conversion_cache_misses += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("conversion", False)
+            except ImportError:
+                pass
             return False
 
         # Use environment variable for TTL calculation
@@ -144,8 +186,22 @@ class CacheManagementService:
         # Track cache hit/miss
         if is_valid:
             self._conversion_cache_hits += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("conversion", True)
+            except ImportError:
+                pass
         else:
             self._conversion_cache_misses += 1
+            # Track in performance monitoring
+            try:
+                from app.core.performance_monitoring import record_cache_access
+
+                record_cache_access("conversion", False)
+            except ImportError:
+                pass
 
         return is_valid
 
@@ -515,18 +571,64 @@ class CacheManagementService:
             Dict with detailed cache statistics
         """
         try:
-            # Get price cache statistics
-            price_cache_stats = await self._get_price_cache_stats(db)
+            # Use optimized query implementation if available
+            try:
+                from app.services.optimized_cache_queries import (
+                    get_cache_statistics_optimized,
+                )
 
-            # Get conversion cache statistics
-            conversion_cache_stats = await self._get_conversion_cache_stats(db)
+                # Get optimized cache statistics (fewer queries)
+                stats = await get_cache_statistics_optimized(db)
 
-            # Combine statistics
-            return {
-                "price_cache": price_cache_stats,
-                "conversion_cache": conversion_cache_stats,
-                "cache_settings": self.get_cache_settings(),
-            }
+                # Add hit/miss statistics from this instance
+                stats["price_cache"]["hit_count"] = self._price_cache_hits
+                stats["price_cache"]["miss_count"] = self._price_cache_misses
+                stats["conversion_cache"]["hit_count"] = self._conversion_cache_hits
+                stats["conversion_cache"]["miss_count"] = self._conversion_cache_misses
+
+                # Calculate hit rates
+                price_total = (
+                    stats["price_cache"]["hit_count"]
+                    + stats["price_cache"]["miss_count"]
+                )
+                if price_total > 0:
+                    stats["price_cache"]["hit_rate"] = round(
+                        stats["price_cache"]["hit_count"] / price_total * 100, 2
+                    )
+                else:
+                    stats["price_cache"]["hit_rate"] = 0.0
+
+                conv_total = (
+                    stats["conversion_cache"]["hit_count"]
+                    + stats["conversion_cache"]["miss_count"]
+                )
+                if conv_total > 0:
+                    stats["conversion_cache"]["hit_rate"] = round(
+                        stats["conversion_cache"]["hit_count"] / conv_total * 100, 2
+                    )
+                else:
+                    stats["conversion_cache"]["hit_rate"] = 0.0
+
+                # Add cache settings
+                stats["cache_settings"] = self.get_cache_settings()
+
+                return stats
+
+            except ImportError:
+                # Fall back to original implementation if optimized queries are not available
+                # Get price cache statistics
+                price_cache_stats = await self._get_price_cache_stats(db)
+
+                # Get conversion cache statistics
+                conversion_cache_stats = await self._get_conversion_cache_stats(db)
+
+                # Combine statistics
+                return {
+                    "price_cache": price_cache_stats,
+                    "conversion_cache": conversion_cache_stats,
+                    "cache_settings": self.get_cache_settings(),
+                }
+
         except Exception as e:
             import logging
 

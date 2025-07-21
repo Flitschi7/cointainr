@@ -2,7 +2,7 @@
 import { onMount } from 'svelte';
 import { browser } from '$app/environment';
 import { getStockPrice, getCryptoPrice } from '$lib/services/api';
-import type { PriceResponse } from '$lib/services/api';
+import type { PriceResponse } from '$lib/types';
 import { formatCurrency } from '$lib/utils/numberFormat';
 
 export let symbol: string;
