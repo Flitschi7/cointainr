@@ -135,16 +135,17 @@ def create_app() -> FastAPI:
 
     # Mount static files from the frontend build
     static_dir = pathlib.Path("/app/static")
+    client_dir = static_dir / "client"
 
-    if static_dir.exists():
-        # Mount the static assets directory
+    if client_dir.exists():
+        # Mount the client directory for static assets
         app.mount(
-            "/_app", StaticFiles(directory=str(static_dir / "_app")), name="static_app"
+            "/_app", StaticFiles(directory=str(client_dir / "_app")), name="static_app"
         )
 
         # Serve favicon and other static files
-        for static_file in static_dir.glob("*.*"):
-            if static_file.is_file() and static_file.name != "index.html":
+        for static_file in client_dir.glob("*.*"):
+            if static_file.is_file():
 
                 @app.get(f"/{static_file.name}")
                 def serve_static_file(static_file=static_file):
@@ -155,9 +156,15 @@ def create_app() -> FastAPI:
             """
             Serve the frontend SPA
             """
-            index_path = static_dir / "index.html"
-            if index_path.exists():
-                return FileResponse(str(index_path))
+            # Try to find index.html
+            for index_file in [
+                client_dir / "index.html",
+                client_dir / "_app" / "immutable" / "entry" / "start.js",
+            ]:
+                if index_file.exists():
+                    return FileResponse(str(index_file))
+
+            # Fallback to API message
             return {"message": "Welcome to the Cointainr Backend!"}
 
         @app.get("/{full_path:path}")
@@ -170,12 +177,17 @@ def create_app() -> FastAPI:
                 return {"message": "API endpoint not found", "path": full_path}
 
             # First check if the path exists as a static file
-            requested_path = static_dir / full_path
+            requested_path = client_dir / full_path
             if requested_path.exists() and requested_path.is_file():
                 return FileResponse(str(requested_path))
 
+            # Check in _app directory
+            app_path = client_dir / "_app" / full_path
+            if app_path.exists() and app_path.is_file():
+                return FileResponse(str(app_path))
+
             # Otherwise return index.html for SPA routing
-            index_path = static_dir / "index.html"
+            index_path = client_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
 

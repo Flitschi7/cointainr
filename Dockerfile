@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./
 
 # Copy built frontend
-COPY --from=frontend-builder /app/frontend/build /app/static
+COPY --from=frontend-builder /app/frontend/.svelte-kit/output /app/static
 
 # Create data directory
 RUN mkdir -p /app/data
