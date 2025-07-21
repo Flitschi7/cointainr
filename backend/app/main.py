@@ -3,7 +3,7 @@ import logging
 import os
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import pathlib
@@ -208,6 +208,56 @@ def create_app() -> FastAPI:
             if index_path.exists():
                 return FileResponse(str(index_path))
 
+            # If no index.html, create a simple HTML page that loads the SvelteKit app
+            from fastapi.responses import HTMLResponse
+
+            # Find the app entry point
+            app_js_files = list(
+                (frontend_dir / "_app" / "immutable" / "entry").glob("app.*.js")
+            )
+            start_js_files = list(
+                (frontend_dir / "_app" / "immutable" / "entry").glob("start.*.js")
+            )
+            css_files = list(
+                (frontend_dir / "_app" / "immutable" / "assets").glob("*.css")
+            )
+
+            if app_js_files and start_js_files:
+                app_js = app_js_files[0].name
+                start_js = start_js_files[0].name
+
+                # Build CSS links
+                css_links = ""
+                for css_file in css_files:
+                    css_links += f'<link rel="stylesheet" href="/_app/immutable/assets/{css_file.name}">\n'
+
+                html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cointainr</title>
+    {css_links}
+</head>
+<body data-sveltekit-preload-data="hover">
+    <div style="display: contents">
+        <div id="svelte"></div>
+    </div>
+    
+    <script type="module">
+        import {{ start }} from '/_app/immutable/entry/{start_js}';
+        import {{ app }} from '/_app/immutable/entry/{app_js}';
+        
+        start({{
+            app,
+            element: document.getElementById('svelte')
+        }});
+    </script>
+</body>
+</html>"""
+                return HTMLResponse(content=html_content)
+
             # Fallback to API message with debug info
             return {
                 "message": "Welcome to the Cointainr Backend!",
@@ -215,6 +265,9 @@ def create_app() -> FastAPI:
                     "frontend_dir": str(frontend_dir),
                     "index_path": str(index_path),
                     "index_exists": index_path.exists(),
+                    "app_js_files": [f.name for f in app_js_files],
+                    "start_js_files": [f.name for f in start_js_files],
+                    "css_files": [f.name for f in css_files],
                     "hint": "Visit /debug/files to see what files are available",
                 },
             }
@@ -242,6 +295,53 @@ def create_app() -> FastAPI:
             index_path = frontend_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
+
+            # If no index.html, create the same HTML template as the root route
+            app_js_files = list(
+                (frontend_dir / "_app" / "immutable" / "entry").glob("app.*.js")
+            )
+            start_js_files = list(
+                (frontend_dir / "_app" / "immutable" / "entry").glob("start.*.js")
+            )
+            css_files = list(
+                (frontend_dir / "_app" / "immutable" / "assets").glob("*.css")
+            )
+
+            if app_js_files and start_js_files:
+                app_js = app_js_files[0].name
+                start_js = start_js_files[0].name
+
+                # Build CSS links
+                css_links = ""
+                for css_file in css_files:
+                    css_links += f'<link rel="stylesheet" href="/_app/immutable/assets/{css_file.name}">\n'
+
+                html_content = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cointainr</title>
+    {css_links}
+</head>
+<body data-sveltekit-preload-data="hover">
+    <div style="display: contents">
+        <div id="svelte"></div>
+    </div>
+    
+    <script type="module">
+        import {{ start }} from '/_app/immutable/entry/{start_js}';
+        import {{ app }} from '/_app/immutable/entry/{app_js}';
+        
+        start({{
+            app,
+            element: document.getElementById('svelte')
+        }});
+    </script>
+</body>
+</html>"""
+                return HTMLResponse(content=html_content)
 
             # Fallback
             return {
