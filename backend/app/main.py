@@ -135,16 +135,15 @@ def create_app() -> FastAPI:
 
     # Mount static files from the frontend build
     static_dir = pathlib.Path("/app/static")
-    client_dir = static_dir / "client"
 
-    if client_dir.exists():
-        # Mount the client directory for static assets
+    if static_dir.exists():
+        # Mount the static assets directory
         app.mount(
-            "/_app", StaticFiles(directory=str(client_dir / "_app")), name="static_app"
+            "/_app", StaticFiles(directory=str(static_dir / "_app")), name="static_app"
         )
 
         # Serve favicon and other static files
-        for static_file in client_dir.glob("*.*"):
+        for static_file in static_dir.glob("*.*"):
             if static_file.is_file() and static_file.name != "index.html":
 
                 @app.get(f"/{static_file.name}")
@@ -156,7 +155,7 @@ def create_app() -> FastAPI:
             """
             Serve the frontend SPA
             """
-            index_path = client_dir / "index.html"
+            index_path = static_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
             return {"message": "Welcome to the Cointainr Backend!"}
@@ -171,12 +170,12 @@ def create_app() -> FastAPI:
                 return {"message": "API endpoint not found", "path": full_path}
 
             # First check if the path exists as a static file
-            requested_path = client_dir / full_path
+            requested_path = static_dir / full_path
             if requested_path.exists() and requested_path.is_file():
                 return FileResponse(str(requested_path))
 
             # Otherwise return index.html for SPA routing
-            index_path = client_dir / "index.html"
+            index_path = static_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
 
