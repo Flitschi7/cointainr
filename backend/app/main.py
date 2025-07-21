@@ -135,31 +135,48 @@ def create_app() -> FastAPI:
 
     # Mount static files from the frontend build
     static_dir = pathlib.Path("/app/static")
-    if static_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+    client_dir = static_dir / "client"
+
+    if client_dir.exists():
+        # Mount the client directory for static assets
+        app.mount(
+            "/_app", StaticFiles(directory=str(client_dir / "_app")), name="static_app"
+        )
+
+        # Serve favicon and other static files
+        for static_file in client_dir.glob("*.*"):
+            if static_file.is_file() and static_file.name != "index.html":
+
+                @app.get(f"/{static_file.name}")
+                def serve_static_file(static_file=static_file):
+                    return FileResponse(str(static_file))
 
         @app.get("/")
         def read_root():
             """
             Serve the frontend SPA
             """
-            index_path = static_dir / "client" / "index.html"
+            index_path = client_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
             return {"message": "Welcome to the Cointainr Backend!"}
 
         @app.get("/{full_path:path}")
-        def serve_spa(full_path: str):
+        async def serve_spa(full_path: str, request: Request):
             """
             Serve SPA routes - catch all routes and return the index.html
             """
+            # Skip API routes
+            if full_path.startswith("api/"):
+                return {"message": "API endpoint not found", "path": full_path}
+
             # First check if the path exists as a static file
-            requested_path = static_dir / "client" / full_path
+            requested_path = client_dir / full_path
             if requested_path.exists() and requested_path.is_file():
                 return FileResponse(str(requested_path))
 
             # Otherwise return index.html for SPA routing
-            index_path = static_dir / "client" / "index.html"
+            index_path = client_dir / "index.html"
             if index_path.exists():
                 return FileResponse(str(index_path))
 
