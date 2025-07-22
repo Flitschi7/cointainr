@@ -49,7 +49,9 @@ export class PortfolioCalculationService {
 					// Get the currency of the price
 					const priceData = this.assetPrices.get(asset.id);
 					currency = priceData?.currency || 'USD';
-					console.log(`PortfolioCalculationService - Asset ${asset.id} (${asset.symbol}): price=${currentPrice}, quantity=${asset.quantity}, value=${value}, currency=${currency}, targetCurrency=${targetCurrency}`);
+					console.log(
+						`PortfolioCalculationService - Asset ${asset.id} (${asset.symbol}): price=${currentPrice}, quantity=${asset.quantity}, value=${value}, currency=${currency}, targetCurrency=${targetCurrency}`
+					);
 				} else {
 					continue; // Skip assets with no price
 				}
@@ -61,11 +63,15 @@ export class PortfolioCalculationService {
 				fromCurrencies.push(currency);
 				toCurrencies.push(targetCurrency);
 				assetIndices.push(i);
-				console.log(`PortfolioCalculationService - Added to conversion batch: ${value} ${currency} -> ${targetCurrency}`);
+				console.log(
+					`PortfolioCalculationService - Added to conversion batch: ${value} ${currency} -> ${targetCurrency}`
+				);
 			} else {
 				// No conversion needed, add directly to total
 				total += value;
-				console.log(`PortfolioCalculationService - Added directly to total: ${value} ${currency} (no conversion needed)`);
+				console.log(
+					`PortfolioCalculationService - Added directly to total: ${value} ${currency} (no conversion needed)`
+				);
 			}
 		}
 
@@ -77,7 +83,7 @@ export class PortfolioCalculationService {
 				toCurrencies,
 				targetCurrency
 			});
-			
+
 			try {
 				// Use batch conversion for better performance
 				const conversions = await enhancedApi.batchConvertCurrency(

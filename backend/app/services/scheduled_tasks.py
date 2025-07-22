@@ -91,7 +91,7 @@ class ScheduledTaskManager:
 
     async def _cleanup_cache(self):
         """Clean up expired cache entries."""
-        logger.info("Starting cache cleanup")
+        # Removed noisy "Starting cache cleanup" log
 
         # Get database session
         async for db in get_db():
@@ -103,9 +103,6 @@ class ScheduledTaskManager:
                         db=db, max_age_days=price_cleanup_days
                     )
                 )
-                logger.info(
-                    f"Cleared {price_entries_cleared} expired price cache entries"
-                )
 
                 # Clean up conversion cache
                 conversion_cleanup_days = settings.CONVERSION_CACHE_CLEANUP_DAYS
@@ -114,9 +111,16 @@ class ScheduledTaskManager:
                         db=db, max_age_days=conversion_cleanup_days
                     )
                 )
-                logger.info(
-                    f"Cleared {conversion_entries_cleared} expired conversion cache entries"
-                )
+
+                # Only log if entries were actually cleared (reduce noise)
+                if price_entries_cleared > 0:
+                    logger.info(
+                        f"Cleared {price_entries_cleared} expired price cache entries"
+                    )
+                if conversion_entries_cleared > 0:
+                    logger.info(
+                        f"Cleared {conversion_entries_cleared} expired conversion cache entries"
+                    )
 
                 return {
                     "price_entries_cleared": price_entries_cleared,

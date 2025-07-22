@@ -51,17 +51,33 @@ class ErrorLoggingMiddleware(BaseHTTPMiddleware):
         # Start timer
         start_time = time.time()
 
-        # Log request details
-        logger.info(
-            f"Request started: {request.method} {request.url.path}",
-            extra={
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "query_params": str(request.query_params),
-                "client_host": request.client.host if request.client else None,
-            },
+        # Skip logging for routine/health check endpoints to reduce noise
+        skip_logging_paths = {
+            "/api/health",
+            "/api/v1/health",
+            "/api/v1/price/cache/asset-status",
+            "/favicon.ico",
+            "/favicon.png",
+            "/_app/version.json",
+        }
+
+        # Skip logging for static assets
+        is_static = request.url.path.startswith("/_app/") or request.url.path.endswith(
+            (".js", ".css", ".png", ".svg", ".ico")
         )
+        should_log = request.url.path not in skip_logging_paths and not is_static
+
+        # Log request details (only for non-routine requests)
+        if should_log:
+            logger.info(
+                f"Request: {request.method} {request.url.path}",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "client_host": request.client.host if request.client else None,
+                },
+            )
 
         try:
             # Process the request
@@ -73,22 +89,23 @@ class ErrorLoggingMiddleware(BaseHTTPMiddleware):
             # Add request ID to response headers
             response.headers["X-Request-ID"] = request_id
 
-            # Log response details
-            logger.info(
-                f"Request completed: {request.method} {request.url.path} - {response.status_code}",
-                extra={
-                    "request_id": request_id,
-                    "status_code": response.status_code,
-                    "duration_ms": duration_ms,
-                },
-            )
+            # Log response details (only for non-routine requests or slow/error responses)
+            if should_log and (response.status_code >= 400 or duration_ms > 1000):
+                logger.info(
+                    f"Response: {request.method} {request.url.path} - {response.status_code} ({duration_ms:.1f}ms)",
+                    extra={
+                        "request_id": request_id,
+                        "status_code": response.status_code,
+                        "duration_ms": duration_ms,
+                    },
+                )
 
             return response
         except Exception as exc:
             # Calculate duration
             duration_ms = (time.time() - start_time) * 1000
 
-            # Log error details
+            # Always log errors
             logger.error(
                 f"Request failed: {request.method} {request.url.path} - {str(exc)}",
                 extra={

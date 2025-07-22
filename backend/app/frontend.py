@@ -23,12 +23,37 @@ def setup_frontend(app: FastAPI):
     2. Serves the index.html file for SPA routing
     3. Ensures API routes are not intercepted by static file serving
     """
-    # Path to the frontend static files (from the Docker build)
-    static_dir = pathlib.Path("/app/static")
+    # Try different paths for static files (Docker vs local development)
+    possible_static_dirs = [
+        pathlib.Path("/app/static"),  # Docker container path
+        pathlib.Path(__file__).parent.parent.parent
+        / "frontend"
+        / "build",  # Local dev path
+        pathlib.Path("../frontend/build"),  # Alternative local path
+    ]
 
-    # Check if the static directory exists
-    if not static_dir.exists():
-        logger.warning("Static directory not found at /app/static")
+    static_dir = None
+    for path in possible_static_dirs:
+        if path.exists():
+            static_dir = path.resolve()
+            logger.info(f"Found frontend static files at: {static_dir}")
+            break
+
+    if not static_dir:
+        logger.warning(
+            f"No static directory found. Tried: {[str(p) for p in possible_static_dirs]}"
+        )
+
+        # Set up a basic fallback route
+        @app.get("/")
+        async def no_frontend():
+            return {
+                "message": "Cointainr API is running",
+                "status": "Frontend not available - static files not found",
+                "api_docs": "/api/docs",
+                "health": "/api/health",
+            }
+
         return
 
     logger.info(f"Setting up frontend serving from {static_dir}")

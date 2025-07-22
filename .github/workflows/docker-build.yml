@@ -113,31 +113,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Generate changelog
-        if: steps.version.outputs.create_release == 'true'
-        id: changelog
-        run: |
-          LATEST_TAG="${{ steps.version.outputs.latest_tag }}"
-
-          # Generate changelog from commits
-          if [ "$LATEST_TAG" = "v0.0.0" ]; then
-            # First release - get all commits
-            CHANGELOG=$(git log --oneline --pretty=format:"- %s" | head -20)
-          else
-            # Get commits since last tag
-            CHANGELOG=$(git log ${LATEST_TAG}..HEAD --oneline --pretty=format:"- %s")
-          fi
-
-          # Save changelog to environment variable
-          {
-            echo 'CHANGELOG<<EOF'
-            echo "$CHANGELOG"
-            echo 'EOF'
-          } >> $GITHUB_ENV
-
-          COMMIT_COUNT=$(echo "$CHANGELOG" | wc -l)
-          echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
-
       - name: Create Release
         if: steps.version.outputs.create_release == 'true'
         uses: softprops/action-gh-release@v1
@@ -152,27 +127,6 @@ jobs:
             docker pull ghcr.io/${{ github.repository }}:latest
             docker pull ghcr.io/${{ github.repository }}:v${{ steps.version.outputs.version }}
             ```
-
-            ### 🔄 Changes in this release (${{ steps.changelog.outputs.commit_count }} commits)
-            ${{ env.CHANGELOG }}
-
-            ### 🐳 Quick Start
-            ```bash
-            # Download docker-compose.yml
-            curl -O https://raw.githubusercontent.com/${{ github.repository }}/v${{ steps.version.outputs.version }}/docker-compose.yml
-
-            # Create .env file
-            curl -O https://raw.githubusercontent.com/${{ github.repository }}/v${{ steps.version.outputs.version }}/.env.example
-            mv .env.example .env
-
-            # Edit .env with your API keys, then start
-            docker-compose up -d
-            ```
-
-            ### 📋 Requirements
-            - Docker & Docker Compose
-            - Finnhub API key
-            - ExchangeRate API key
           draft: false
           prerelease: false
         env:

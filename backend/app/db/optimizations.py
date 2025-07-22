@@ -6,59 +6,13 @@ including connection pooling, query optimization, and index management.
 """
 
 import logging
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.pool import QueuePool
-from sqlalchemy import event, Index, text
+from sqlalchemy import Index, text
 from app.core.config import settings
-from app.db.session import engine, Base
 from app.models.price_cache import PriceCache
 from app.models.conversion_cache import ConversionCache
 
 # Set up logger
 logger = logging.getLogger(__name__)
-
-
-def configure_connection_pooling():
-    """
-    Configure connection pooling for the SQLAlchemy engine.
-
-    This function updates the engine configuration to use optimal connection pooling
-    settings based on the application's needs.
-    """
-    # Connection pooling is already configured in the engine creation,
-    # but we can optimize the pool size based on expected load
-
-    # Get the database URL from settings
-    database_url = settings.DATABASE_URL
-
-    # Only apply pooling optimizations for non-SQLite databases
-    # SQLite doesn't benefit from connection pooling in the same way
-    if not database_url.startswith("sqlite"):
-        logger.info("Configuring optimized connection pooling")
-
-        # Create a new engine with optimized pooling settings
-        optimized_engine = create_async_engine(
-            database_url,
-            poolclass=QueuePool,
-            pool_size=10,  # Number of connections to keep open
-            max_overflow=20,  # Maximum number of connections to create beyond pool_size
-            pool_timeout=30,  # Seconds to wait before timing out on getting a connection
-            pool_recycle=1800,  # Recycle connections after 30 minutes
-            pool_pre_ping=True,  # Check connection validity before using from pool
-        )
-
-        # Create a new sessionmaker with the optimized engine
-        optimized_session_maker = async_sessionmaker(
-            autocommit=False,
-            autoflush=False,
-            bind=optimized_engine,
-        )
-
-        # Return the optimized session maker for use
-        return optimized_session_maker
-
-    logger.info("Using default connection settings for SQLite")
-    return None
 
 
 async def create_database_indexes():
@@ -71,7 +25,7 @@ async def create_database_indexes():
     from sqlalchemy.ext.asyncio import AsyncSession
     from app.db.session import SessionLocal
 
-    logger.info("Creating optimized database indexes")
+    logger.debug("Creating optimized database indexes")
 
     async with SessionLocal() as session:
         try:
@@ -144,7 +98,7 @@ async def create_database_indexes():
                         logger.warning(f"Could not create index {index.name}: {e}")
 
             await session.commit()
-            logger.info("Database indexes created successfully")
+            logger.debug("Database indexes created successfully")
 
         except Exception as e:
             await session.rollback()
@@ -157,17 +111,13 @@ async def optimize_database():
     Perform database optimization tasks.
 
     This function runs various optimization tasks including:
-    - Creating indexes
-    - Configuring connection pooling
-    - Running ANALYZE on SQLite databases
+    - Creating indexes for better query performance
+    - Running ANALYZE on SQLite databases for query plan optimization
     """
-    logger.info("Starting database optimization")
+    logger.debug("Starting database optimization")
 
     # Create indexes for better query performance
     await create_database_indexes()
-
-    # Configure connection pooling (if applicable)
-    optimized_session = configure_connection_pooling()
 
     # For SQLite, run ANALYZE to optimize query planning
     if settings.DATABASE_URL.startswith("sqlite"):
@@ -176,11 +126,10 @@ async def optimize_database():
 
         async with SessionLocal() as session:
             try:
-                logger.info("Running ANALYZE on SQLite database")
+                logger.debug("Running ANALYZE on SQLite database")
                 await session.execute(text("ANALYZE"))
                 await session.commit()
             except Exception as e:
                 logger.warning(f"Could not run ANALYZE on SQLite database: {e}")
 
-    logger.info("Database optimization completed")
-    return optimized_session
+    logger.debug("Database optimization completed")
