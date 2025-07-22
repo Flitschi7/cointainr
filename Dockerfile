@@ -41,7 +41,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy only necessary backend code
 # Exclude tests, __pycache__, and other non-runtime files
 COPY backend/app ./app
-COPY backend/docs ./docs
 
 # Copy built frontend from the correct build directory (SvelteKit's 'build' output)
 # This is where the static adapter outputs files, which will be served by FastAPI
