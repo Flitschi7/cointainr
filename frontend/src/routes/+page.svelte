@@ -447,16 +447,26 @@
 
 	// Function to update sorted assets
 	async function updateSortedAssets() {
+		console.log('updateSortedAssets called with filteredAssets length:', filteredAssets.length);
 		sortedAssets = await sortAssets(filteredAssets, sortField, sortDirection);
+		console.log('sortedAssets updated, length:', sortedAssets.length);
+		
+		// Manually trigger totals update after sorting is complete
+		if (sortedAssets.length > 0 && pricesLoaded) {
+			console.log('Manually triggering totals update after sorting');
+			await updateTotals();
+		}
 	}
 
 	// React to changes in filtered assets or sort parameters
 	$: if (filteredAssets && sortField && sortDirection) {
+		console.log('Reactive update 1: filteredAssets, sortField, sortDirection');
 		updateSortedAssets();
 	}
 
 	// Also update when data changes
 	$: if (filteredAssets) {
+		console.log('Reactive update 2: filteredAssets changed, length:', filteredAssets.length);
 		updateSortedAssets();
 	}
 
@@ -514,26 +524,29 @@
 					const quantity = asset.quantity || 0;
 					let currentValue = currentPrice * quantity;
 
-					// The price should already be in the correct currency from the price service
-					// But let's ensure it's converted to total currency if needed
-					const assetCurrency = asset.buy_currency || asset.currency || 'USD';
-					if (assetCurrency !== totalCurrency) {
+					// Get the price currency from the price data, not the asset currency!
+					const priceMap = priceManagementService.getPriceMap();
+					const priceData = priceMap.get(asset.id);
+					const priceCurrency = priceData?.currency || 'USD';
+					
+					// Convert the total value to target currency if needed
+					if (priceCurrency !== totalCurrency) {
 						try {
 							const conversionData = await enhancedApi.convertCurrency(
-								assetCurrency,
+								priceCurrency,
 								totalCurrency,
 								currentValue,
 								{ forceRefresh: false }
 							);
 							currentValue = conversionData.converted;
 						} catch (error) {
-							console.error(`Failed to convert ${assetCurrency} to ${totalCurrency}:`, error);
+							console.error(`Failed to convert ${priceCurrency} to ${totalCurrency}:`, error);
 							// Use original value if conversion fails
 						}
 					}
 
 					console.log(
-						`${asset.type} asset ${asset.symbol}: Price=${currentPrice}, Quantity=${quantity}, Value=${currentValue} ${totalCurrency}`
+						`${asset.type} asset ${asset.symbol}: Price=${currentPrice} ${priceCurrency}, Quantity=${quantity}, Value=${currentValue} ${totalCurrency}`
 					);
 
 					// Add to total value
@@ -605,7 +618,7 @@
 
 	// Also update totals when sorted assets change
 	$: if (sortedAssets && sortedAssets.length > 0) {
-		console.log('Assets changed, updating totals');
+		console.log('Assets changed, updating totals, sortedAssets length:', sortedAssets.length);
 		updateTotals();
 	}
 

@@ -39,9 +39,9 @@ export class PortfolioCalculationService {
 			let currency = '';
 
 			if (asset.type === 'cash') {
-				// Cash - assume it's in EUR
+				// Cash - use the actual currency of the cash asset
 				value = asset.quantity;
-				currency = 'EUR';
+				currency = asset.currency || 'EUR'; // Fallback to EUR if currency is null
 			} else {
 				const currentPrice = this.getCurrentPrice(asset);
 				if (currentPrice > 0) {
@@ -49,6 +49,7 @@ export class PortfolioCalculationService {
 					// Get the currency of the price
 					const priceData = this.assetPrices.get(asset.id);
 					currency = priceData?.currency || 'USD';
+					console.log(`PortfolioCalculationService - Asset ${asset.id} (${asset.symbol}): price=${currentPrice}, quantity=${asset.quantity}, value=${value}, currency=${currency}, targetCurrency=${targetCurrency}`);
 				} else {
 					continue; // Skip assets with no price
 				}
@@ -60,14 +61,23 @@ export class PortfolioCalculationService {
 				fromCurrencies.push(currency);
 				toCurrencies.push(targetCurrency);
 				assetIndices.push(i);
+				console.log(`PortfolioCalculationService - Added to conversion batch: ${value} ${currency} -> ${targetCurrency}`);
 			} else {
 				// No conversion needed, add directly to total
 				total += value;
+				console.log(`PortfolioCalculationService - Added directly to total: ${value} ${currency} (no conversion needed)`);
 			}
 		}
 
 		// Second pass: perform batch conversion if needed
 		if (amounts.length > 0) {
+			console.log('PortfolioCalculationService - Batch conversion needed:', {
+				amounts,
+				fromCurrencies,
+				toCurrencies,
+				targetCurrency
+			});
+			
 			try {
 				// Use batch conversion for better performance
 				const conversions = await enhancedApi.batchConvertCurrency(
@@ -76,6 +86,8 @@ export class PortfolioCalculationService {
 					toCurrencies,
 					{ forceRefresh: false }
 				);
+
+				console.log('PortfolioCalculationService - Batch conversion results:', conversions);
 
 				// Add converted values to total
 				conversions.forEach((conversion) => {
