@@ -8,7 +8,39 @@ import type {
 	AssetCacheStatus
 } from '$lib/types';
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+// Environment-aware API base URL configuration
+// In Docker/production: Use relative URLs for same-origin requests
+// In development: Use environment variable or fallback to dev server
+function getApiBaseUrl(): string {
+	// Check if we're in a browser environment
+	if (typeof window !== 'undefined') {
+		// In production/Docker, use relative URL for same-origin requests
+		// This works when frontend and backend are served from the same origin
+		if (
+			window.location.origin.includes('localhost:8893') ||
+			window.location.origin.includes('127.0.0.1:8893') ||
+			import.meta.env.PROD
+		) {
+			return '/api/v1';
+		}
+	}
+
+	// In development, use environment variable or default dev server
+	return import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+}
+
+const API_BASE_URL = getApiBaseUrl();
+
+// Debug logging for development
+if (import.meta.env.DEV) {
+	console.log(`[API] Using API base URL: ${API_BASE_URL}`);
+	console.log(`[API] Environment:`, {
+		origin: typeof window !== 'undefined' ? window.location.origin : 'SSR',
+		VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+		PROD: import.meta.env.PROD,
+		DEV: import.meta.env.DEV
+	});
+}
 
 // --- Asset API Service ---
 

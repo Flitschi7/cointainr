@@ -62,7 +62,8 @@ export function isForceRefreshOnlyMode(): boolean {
  * @returns API base URL
  */
 export function getApiBaseUrl(): string {
-	return import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+	// Use relative URL to ensure it works in any environment
+	return import.meta.env.VITE_API_BASE_URL || '/api/v1';
 }
 
 /**

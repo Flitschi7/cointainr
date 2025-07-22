@@ -27,7 +27,7 @@ Thumbs.db
 # Frontend
 frontend/node_modules/
 frontend/.svelte-kit/
-frontend/build/
+# Don't ignore frontend/build/ as we need it for the Docker build
 frontend/dist/
 frontend/.env
 frontend/.env.local
