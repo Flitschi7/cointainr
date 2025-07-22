@@ -13,7 +13,7 @@ services:
       # =============================================================================
       # DATABASE CONFIGURATION
       # =============================================================================
-      - DATABASE_URL=sqlite+aiosqlite:///./data/cointainr.db
+      - COINTAINR_DATABASE_URL=sqlite+aiosqlite:///./data/cointainr.db
 
       # =============================================================================
       # API KEYS (Required - Replace with your actual keys)

@@ -31,6 +31,32 @@ function getApiBaseUrl(): string {
 
 const API_BASE_URL = getApiBaseUrl();
 
+// Helper function to safely construct URLs that works with both relative and absolute base URLs
+function createApiUrl(path: string, searchParams?: Record<string, string>): string {
+	let fullUrl: string;
+
+	// If API_BASE_URL is relative, construct absolute URL using current origin
+	if (API_BASE_URL.startsWith('/')) {
+		// In browser, use current origin; in SSR, use empty string (will be resolved by fetch)
+		const origin = typeof window !== 'undefined' ? window.location.origin : '';
+		fullUrl = `${origin}${API_BASE_URL}${path}`;
+	} else {
+		// API_BASE_URL is already absolute
+		fullUrl = `${API_BASE_URL}${path}`;
+	}
+
+	// Add search parameters if provided
+	if (searchParams) {
+		const url = new URL(fullUrl);
+		Object.entries(searchParams).forEach(([key, value]) => {
+			url.searchParams.set(key, value);
+		});
+		return url.toString();
+	}
+
+	return fullUrl;
+}
+
 // Debug logging for development
 if (import.meta.env.DEV) {
 	console.log(`[API] Using API base URL: ${API_BASE_URL}`);
@@ -111,12 +137,12 @@ export async function getStockPrice(
 	symbol: string,
 	forceRefresh: boolean = false
 ): Promise<PriceResponse> {
-	const url = new URL(`${API_BASE_URL}/price/stock/${symbol}`);
-	if (forceRefresh) {
-		url.searchParams.set('force_refresh', 'true');
-	}
+	const url = createApiUrl(
+		`/price/stock/${symbol}`,
+		forceRefresh ? { force_refresh: 'true' } : undefined
+	);
 
-	const response = await fetch(url.toString());
+	const response = await fetch(url);
 	if (!response.ok) {
 		throw new Error('Failed to fetch stock price');
 	}
@@ -130,12 +156,12 @@ export async function getCryptoPrice(
 	symbol: string,
 	forceRefresh: boolean = false
 ): Promise<PriceResponse> {
-	const url = new URL(`${API_BASE_URL}/price/crypto/${symbol}`);
-	if (forceRefresh) {
-		url.searchParams.set('force_refresh', 'true');
-	}
+	const url = createApiUrl(
+		`/price/crypto/${symbol}`,
+		forceRefresh ? { force_refresh: 'true' } : undefined
+	);
 
-	const response = await fetch(url.toString());
+	const response = await fetch(url);
 	if (!response.ok) {
 		throw new Error('Failed to fetch crypto price');
 	}
@@ -151,15 +177,14 @@ export async function convertCurrency(
 	amount: number,
 	forceRefresh: boolean = false
 ): Promise<ConversionResponse> {
-	const url = new URL(`${API_BASE_URL}/price/convert`);
-	url.searchParams.set('from_currency', fromCurrency);
-	url.searchParams.set('to_currency', toCurrency);
-	url.searchParams.set('amount', amount.toString());
-	if (forceRefresh) {
-		url.searchParams.set('force_refresh', 'true');
-	}
+	const url = createApiUrl('/price/convert', {
+		from_currency: fromCurrency,
+		to_currency: toCurrency,
+		amount: amount.toString(),
+		...(forceRefresh && { force_refresh: 'true' })
+	});
 
-	const response = await fetch(url.toString());
+	const response = await fetch(url);
 	if (!response.ok) {
 		throw new Error('Failed to convert currency');
 	}
@@ -174,12 +199,12 @@ export async function getConversionRate(
 	toCurrency: string,
 	forceRefresh: boolean = false
 ): Promise<ConversionRateResponse> {
-	const url = new URL(`${API_BASE_URL}/price/rate/${fromCurrency}/${toCurrency}`);
-	if (forceRefresh) {
-		url.searchParams.set('force_refresh', 'true');
-	}
+	const url = createApiUrl(
+		`/price/rate/${fromCurrency}/${toCurrency}`,
+		forceRefresh ? { force_refresh: 'true' } : undefined
+	);
 
-	const response = await fetch(url.toString());
+	const response = await fetch(url);
 	if (!response.ok) {
 		throw new Error('Failed to fetch conversion rate');
 	}
