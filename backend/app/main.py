@@ -16,16 +16,11 @@ from app.middleware.error_logging import ErrorLoggingMiddleware
 
 from app.api.endpoints import assets
 from app.api.endpoints import price
-from app.api.endpoints import cache
-from app.api.endpoints import conversion
-from app.api.endpoints import health
-from app.api.endpoints import performance
 from app.services.scheduled_tasks import scheduled_task_manager
 
 # Import models to ensure they are registered with SQLAlchemy
 from app.models import asset
 from app.models import price_cache
-from app.models import conversion_cache
 
 # Configure logging
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -150,22 +145,6 @@ def create_app() -> FastAPI:
 
     # Register price endpoints under /api/v1/price
     app.include_router(price.router, prefix="/api/v1/price", tags=["price"])
-
-    # Register cache endpoints under /api/v1/cache
-    app.include_router(cache.router, prefix="/api/v1/cache", tags=["cache"])
-
-    # Register conversion endpoints under /api/v1/conversion
-    app.include_router(
-        conversion.router, prefix="/api/v1/conversion", tags=["conversion"]
-    )
-
-    # Register health check endpoints under /api/v1/health
-    app.include_router(health.router, prefix="/api/v1/health", tags=["health"])
-
-    # Register performance monitoring endpoints under /api/v1/performance
-    app.include_router(
-        performance.router, prefix="/api/v1/performance", tags=["performance"]
-    )
 
     # Simple health check endpoint for quick testing
     @app.get("/api/health", tags=["health"])

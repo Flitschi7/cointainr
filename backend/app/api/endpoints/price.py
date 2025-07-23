@@ -455,19 +455,6 @@ async def get_cache_stats(db: AsyncSession = db_dep):
     }
 
 
-@router.delete("/cache/conversions")
-async def clear_conversion_cache(db: AsyncSession = db_dep):
-    """
-    Clear all cached conversion rates. Next conversion requests will fetch fresh data from APIs.
-    """
-    from app.crud import crud_conversion_cache
-
-    cleared_count = await crud_conversion_cache.cleanup_old_conversion_cache_entries(
-        db=db, max_age_days=0
-    )
-    return {"message": f"Cleared {cleared_count} cached conversion entries"}
-
-
 @router.get("/cache/conversions/stats")
 async def get_conversion_cache_stats(db: AsyncSession = db_dep):
     """
@@ -568,3 +555,16 @@ async def get_asset_cache_status(db: AsyncSession = db_dep):
             )
 
     return cache_status
+
+
+@router.delete("/cache/conversions")
+async def clear_conversion_cache(db: AsyncSession = db_dep):
+    """
+    Clear all cached conversion rates. Next conversion requests will fetch fresh data from APIs.
+    """
+    from app.crud import crud_conversion_cache
+
+    cleared_count = await crud_conversion_cache.cleanup_old_conversion_cache_entries(
+        db=db, max_age_days=0
+    )
+    return {"message": f"Cleared {cleared_count} cached conversion entries"}

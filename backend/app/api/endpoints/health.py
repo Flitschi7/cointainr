@@ -10,6 +10,7 @@ from typing import Dict, Any
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 from app.db.database import get_db
 from app.services.enhanced_price_service import enhanced_price_service
 from app.utils.graceful_degradation import get_all_circuit_breakers
@@ -35,8 +36,8 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         db_error = None
         try:
             # Execute a simple query to check database connection
-            result = await db.execute("SELECT 1")
-            await result.fetchone()
+            result = await db.execute(text("SELECT 1"))
+            result.fetchone()
         except Exception as e:
             db_status = "unhealthy"
             db_error = str(e)
@@ -103,8 +104,8 @@ async def database_health_check(db: AsyncSession = Depends(get_db)):
     try:
         # Check database connection
         start_time = datetime.now(timezone.utc)
-        result = await db.execute("SELECT 1")
-        await result.fetchone()
+        result = await db.execute(text("SELECT 1"))
+        result.fetchone()
         end_time = datetime.now(timezone.utc)
 
         # Calculate response time

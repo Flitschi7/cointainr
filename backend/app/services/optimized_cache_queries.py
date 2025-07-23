@@ -6,7 +6,7 @@ focusing on performance and efficiency for frequently used queries.
 """
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_, or_, desc, text
+from sqlalchemy import select, func, and_, or_, desc, text, case
 from sqlalchemy.future import select as future_select
 from sqlalchemy.orm import selectinload
 from datetime import datetime, timedelta, timezone

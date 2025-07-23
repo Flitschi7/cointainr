@@ -580,6 +580,44 @@ class CacheManagementService:
                 # Get optimized cache statistics (fewer queries)
                 stats = await get_cache_statistics_optimized(db)
 
+                # Map field names to match schema expectations
+                # Convert total_entries to count
+                stats["price_cache"]["count"] = stats["price_cache"].pop(
+                    "total_entries", 0
+                )
+                stats["conversion_cache"]["count"] = stats["conversion_cache"].pop(
+                    "total_entries", 0
+                )
+
+                # Add missing fields for schema compliance
+                stats["price_cache"].setdefault("average_age_minutes", 0)
+                stats["price_cache"].setdefault("oldest_entry_minutes", 0)
+                stats["price_cache"].setdefault("newest_entry_minutes", 0)
+                stats["price_cache"].setdefault(
+                    "valid_entries", stats["price_cache"].get("fresh_entries", 0)
+                )
+                stats["price_cache"].setdefault(
+                    "expired_entries",
+                    stats["price_cache"]["count"]
+                    - stats["price_cache"].get("fresh_entries", 0),
+                )
+                stats["price_cache"].setdefault("by_asset_type", {})
+                stats["price_cache"].setdefault("by_source", {})
+
+                stats["conversion_cache"].setdefault("average_age_hours", 0.0)
+                stats["conversion_cache"].setdefault("oldest_entry_hours", 0.0)
+                stats["conversion_cache"].setdefault("newest_entry_hours", 0.0)
+                stats["conversion_cache"].setdefault(
+                    "valid_entries", stats["conversion_cache"].get("fresh_entries", 0)
+                )
+                stats["conversion_cache"].setdefault(
+                    "expired_entries",
+                    stats["conversion_cache"]["count"]
+                    - stats["conversion_cache"].get("fresh_entries", 0),
+                )
+                stats["conversion_cache"].setdefault("currency_pairs", 0)
+                stats["conversion_cache"].setdefault("by_source", {})
+
                 # Add hit/miss statistics from this instance
                 stats["price_cache"]["hit_count"] = self._price_cache_hits
                 stats["price_cache"]["miss_count"] = self._price_cache_misses
