@@ -132,5 +132,5 @@ export function createRetryableFunction<T extends (...args: any[]) => Promise<an
 ): T {
 	return ((...args: Parameters<T>): ReturnType<T> => {
 		return withRetry(() => fn(...args), options) as ReturnType<T>;
-	}) as T;
+	}) as unknown as T;
 }

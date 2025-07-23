@@ -419,14 +419,14 @@ describe('Enhanced API Service', () => {
 			};
 
 			// Setup mocks to return different responses based on symbol
-			vi.mocked(api.getStockPrice).mockImplementation((symbol) => {
+			vi.mocked(api.getStockPrice).mockImplementation((symbol: string) => {
 				return Promise.resolve({
 					...mockStockResponse,
 					symbol
 				});
 			});
 
-			vi.mocked(api.getCryptoPrice).mockImplementation((symbol) => {
+			vi.mocked(api.getCryptoPrice).mockImplementation((symbol: string) => {
 				return Promise.resolve({
 					...mockCryptoResponse,
 					symbol
@@ -618,22 +618,24 @@ describe('batchConvertCurrency', () => {
 			fetched_at: new Date().toISOString()
 		};
 
-		vi.mocked(api.convertCurrency).mockImplementation((from, to, amount) => {
-			if (from === 'USD' && to === 'EUR') {
-				return Promise.resolve({
-					...mockUsdEurResponse,
-					amount,
-					converted: amount * 0.85
-				});
-			} else if (from === 'EUR' && to === 'JPY') {
-				return Promise.resolve({
-					...mockEurJpyResponse,
-					amount,
-					converted: amount * 130
-				});
+		vi.mocked(api.convertCurrency).mockImplementation(
+			(from: string, to: string, amount: number) => {
+				if (from === 'USD' && to === 'EUR') {
+					return Promise.resolve({
+						...mockUsdEurResponse,
+						amount,
+						converted: amount * 0.85
+					});
+				} else if (from === 'EUR' && to === 'JPY') {
+					return Promise.resolve({
+						...mockEurJpyResponse,
+						amount,
+						converted: amount * 130
+					});
+				}
+				return Promise.reject(new Error('Unexpected currency pair'));
 			}
-			return Promise.reject(new Error('Unexpected currency pair'));
-		});
+		);
 
 		// Call the batch function
 		const results = await enhancedApi.batchConvertCurrency(
@@ -669,16 +671,18 @@ describe('batchConvertCurrency', () => {
 		};
 
 		// Set up the mock implementation
-		vi.mocked(api.convertCurrency).mockImplementation((from, to, amount) => {
-			if (from === 'EUR' && to === 'JPY') {
-				return Promise.resolve({
-					...mockEurJpyResponse,
-					amount,
-					converted: amount * 130
-				});
+		vi.mocked(api.convertCurrency).mockImplementation(
+			(from: string, to: string, amount: number) => {
+				if (from === 'EUR' && to === 'JPY') {
+					return Promise.resolve({
+						...mockEurJpyResponse,
+						amount,
+						converted: amount * 130
+					});
+				}
+				return Promise.reject(new Error('Unexpected currency pair'));
 			}
-			return Promise.reject(new Error('Unexpected currency pair'));
-		});
+		);
 
 		// Pre-cache USD to EUR conversion
 		cacheService.set('conversion_USD_EUR_100', mockUsdEurResponse);
@@ -709,16 +713,18 @@ describe('batchConvertCurrency', () => {
 		};
 
 		// Mock successful response for USD to EUR
-		vi.mocked(api.convertCurrency).mockImplementation((from, to, amount) => {
-			if (from === 'USD' && to === 'EUR') {
-				return Promise.resolve({
-					...mockUsdEurResponse,
-					amount,
-					converted: amount * 0.85
-				});
+		vi.mocked(api.convertCurrency).mockImplementation(
+			(from: string, to: string, amount: number) => {
+				if (from === 'USD' && to === 'EUR') {
+					return Promise.resolve({
+						...mockUsdEurResponse,
+						amount,
+						converted: amount * 0.85
+					});
+				}
+				return Promise.reject(new Error('API rate limit exceeded'));
 			}
-			return Promise.reject(new Error('API rate limit exceeded'));
-		});
+		);
 
 		// Call the batch function
 		const results = await enhancedApi.batchConvertCurrency(
@@ -764,16 +770,18 @@ describe('batchConvertCurrency', () => {
 		};
 
 		// Mock successful response for USD to EUR
-		vi.mocked(api.convertCurrency).mockImplementation((from, to, amount) => {
-			if (from === 'USD' && to === 'EUR') {
-				return Promise.resolve({
-					...mockUsdEurResponse,
-					amount,
-					converted: amount * 0.85
-				});
+		vi.mocked(api.convertCurrency).mockImplementation(
+			(from: string, to: string, amount: number) => {
+				if (from === 'USD' && to === 'EUR') {
+					return Promise.resolve({
+						...mockUsdEurResponse,
+						amount,
+						converted: amount * 0.85
+					});
+				}
+				return Promise.reject(new Error('API rate limit exceeded'));
 			}
-			return Promise.reject(new Error('API rate limit exceeded'));
-		});
+		);
 
 		// Call the batch function with force refresh to trigger API calls
 		const results = await enhancedApi.batchConvertCurrency(

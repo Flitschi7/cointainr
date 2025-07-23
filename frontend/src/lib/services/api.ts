@@ -7,6 +7,7 @@ import type {
 	RefreshAllResponse,
 	AssetCacheStatus
 } from '$lib/types';
+import { devLog } from '$lib/utils/logger';
 
 // Environment-aware API base URL configuration
 // In Docker/production: Use relative URLs for same-origin requests

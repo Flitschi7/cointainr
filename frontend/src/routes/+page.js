@@ -6,7 +6,8 @@ import {
 } from '$lib/services/api';
 // Note: Cache management is now handled by CacheStatusProvider
 import { cacheStatusService } from '$lib/services/cacheStatus';
-import { getMultipleAssetPrices, getCachedConversionRate } from '$lib/utils/cacheOperations';
+import { getMultipleAssetPrices } from '$lib/utils/cacheOperations';
+import { devLog } from '$lib/utils/logger';
 
 /** @type {import('./$types').PageLoad} */
 export async function load() {
@@ -61,7 +62,7 @@ export async function load() {
 				// Even if cache is stale, we use it. Only "Force Refresh" button should call external APIs
 				initialPrices = await getMultipleAssetPrices(pricedAssets, false);
 
-				console.log(
+				devLog.info(
 					`Page load completed: ${initialPrices.size} prices loaded (${cacheHitCount} from cache, ${apiCallCount} from API)`
 				);
 			} catch (error) {

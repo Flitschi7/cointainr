@@ -21,9 +21,8 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-
 <div
-	class="fixed inset-0 bg-background bg-opacity-90 z-50 flex justify-center items-center"
+	class="bg-background bg-opacity-90 fixed inset-0 z-50 flex items-center justify-center"
 	on:click={handleClick}
 	on:keydown={(event) => {
 		if (event.key === 'Escape') {
@@ -34,7 +33,10 @@
 	aria-modal="true"
 	tabindex="0"
 >
-	<div class="bg-surface rounded-lg shadow-xl p-8 w-full max-w-2xl outline-none" style="font-family: var(--font-headline); color: var(--color-text-light);">
+	<div
+		class="bg-surface w-full max-w-2xl rounded-lg p-8 shadow-xl outline-none"
+		style="font-family: var(--font-headline); color: var(--color-text-light);"
+	>
 		<slot />
 	</div>
 </div>

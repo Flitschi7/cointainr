@@ -6,6 +6,7 @@
 	 * Positioned inline next to the currency selector
 	 */
 	import * as enhancedApi from '$lib/services/enhancedApi';
+	import { devLog } from '$lib/utils/logger';
 
 	export let baseCurrency: string = 'EUR'; // The currency everything is converted to
 	export let assets: any[] = []; // Assets to determine which currencies are relevant
@@ -28,9 +29,9 @@
 
 	// Debug logging
 	$: if (assets.length > 0) {
-		console.log('CurrencyRateDisplay - Assets:', assets.length);
-		console.log('CurrencyRateDisplay - Base currency:', baseCurrency);
-		console.log(
+		devLog.debug('CurrencyRateDisplay - Assets:', assets.length);
+		devLog.debug('CurrencyRateDisplay - Base currency:', baseCurrency);
+		devLog.debug(
 			'CurrencyRateDisplay - Asset currencies:',
 			assets.map((asset) => {
 				const detectedCurrency =
@@ -46,7 +47,7 @@
 				};
 			})
 		);
-		console.log('CurrencyRateDisplay - Relevant currencies:', relevantCurrencies);
+		devLog.debug('CurrencyRateDisplay - Relevant currencies:', relevantCurrencies);
 	}
 
 	let currencyRates: Map<string, { rate: number; cached: boolean }> = new Map();

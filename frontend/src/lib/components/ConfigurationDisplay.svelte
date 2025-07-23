@@ -17,11 +17,11 @@
 </script>
 
 <div class="config-display">
-	<h2 class="text-xl font-bold mb-4">Current Configuration</h2>
-	
-	<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-		<div class="bg-surface p-4 rounded-md">
-			<h3 class="text-lg font-semibold mb-2">Cache Settings</h3>
+	<h2 class="mb-4 text-xl font-bold">Current Configuration</h2>
+
+	<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+		<div class="bg-surface rounded-md p-4">
+			<h3 class="mb-2 text-lg font-semibold">Cache Settings</h3>
 			<ul class="space-y-2">
 				<li>
 					<span class="font-medium">Price Cache TTL:</span>
@@ -31,25 +31,31 @@
 				<li>
 					<span class="font-medium">Conversion Cache TTL:</span>
 					<span class="ml-2">{formatTime(settings.conversionCacheTTL.value)}</span>
-					<div class="text-xs text-gray-400">Environment: {settings.conversionCacheTTL.envVariable}</div>
+					<div class="text-xs text-gray-400">
+						Environment: {settings.conversionCacheTTL.envVariable}
+					</div>
 				</li>
 			</ul>
 		</div>
-		
-		<div class="bg-surface p-4 rounded-md">
-			<h3 class="text-lg font-semibold mb-2">Application Settings</h3>
+
+		<div class="bg-surface rounded-md p-4">
+			<h3 class="mb-2 text-lg font-semibold">Application Settings</h3>
 			<ul class="space-y-2">
 				<li>
 					<span class="font-medium">Default Currency:</span>
 					<span class="ml-2">{settings.defaultCurrency.value}</span>
-					<div class="text-xs text-gray-400">Environment: {settings.defaultCurrency.envVariable}</div>
+					<div class="text-xs text-gray-400">
+						Environment: {settings.defaultCurrency.envVariable}
+					</div>
 				</li>
 				<li>
 					<span class="font-medium">Force Refresh Only:</span>
 					<span class="ml-2 {settings.forceRefreshOnly.value ? 'text-red-500' : 'text-green-500'}">
 						{settings.forceRefreshOnly.displayValue}
 					</span>
-					<div class="text-xs text-gray-400">Environment: {settings.forceRefreshOnly.envVariable}</div>
+					<div class="text-xs text-gray-400">
+						Environment: {settings.forceRefreshOnly.envVariable}
+					</div>
 				</li>
 				<li>
 					<span class="font-medium">API Base URL:</span>

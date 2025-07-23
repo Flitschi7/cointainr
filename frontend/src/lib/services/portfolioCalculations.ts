@@ -1,6 +1,10 @@
 import type { Asset } from '$lib/types';
 import * as enhancedApi from './enhancedApi';
 
+// Conditional logging for development
+const isDev = import.meta.env.DEV;
+const debug = isDev ? console.log : () => {};
+
 export interface PortfolioTotals {
 	totalValue: number;
 	totalYield: number;
@@ -49,7 +53,7 @@ export class PortfolioCalculationService {
 					// Get the currency of the price
 					const priceData = this.assetPrices.get(asset.id);
 					currency = priceData?.currency || 'USD';
-					console.log(
+					debug(
 						`PortfolioCalculationService - Asset ${asset.id} (${asset.symbol}): price=${currentPrice}, quantity=${asset.quantity}, value=${value}, currency=${currency}, targetCurrency=${targetCurrency}`
 					);
 				} else {
@@ -63,13 +67,13 @@ export class PortfolioCalculationService {
 				fromCurrencies.push(currency);
 				toCurrencies.push(targetCurrency);
 				assetIndices.push(i);
-				console.log(
+				debug(
 					`PortfolioCalculationService - Added to conversion batch: ${value} ${currency} -> ${targetCurrency}`
 				);
 			} else {
 				// No conversion needed, add directly to total
 				total += value;
-				console.log(
+				debug(
 					`PortfolioCalculationService - Added directly to total: ${value} ${currency} (no conversion needed)`
 				);
 			}
@@ -77,7 +81,7 @@ export class PortfolioCalculationService {
 
 		// Second pass: perform batch conversion if needed
 		if (amounts.length > 0) {
-			console.log('PortfolioCalculationService - Batch conversion needed:', {
+			debug('PortfolioCalculationService - Batch conversion needed:', {
 				amounts,
 				fromCurrencies,
 				toCurrencies,
@@ -93,7 +97,7 @@ export class PortfolioCalculationService {
 					{ forceRefresh: false }
 				);
 
-				console.log('PortfolioCalculationService - Batch conversion results:', conversions);
+				debug('PortfolioCalculationService - Batch conversion results:', conversions);
 
 				// Add converted values to total
 				conversions.forEach((conversion) => {

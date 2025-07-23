@@ -1,10 +1,12 @@
-import { getStockPrice, getCryptoPrice, getConversionRate } from '$lib/services/api';
-import type { Asset } from '$lib/types';
-import { assetCacheStatus } from '$lib/stores/assetStatusStore';
-
 /**
- * Utility functions for cache-related operations
+ * Cache operations utilities for managing price and conversion caches
  */
+
+import { getStockPrice, getCryptoPrice, getConversionRate } from '$lib/services/api';
+import * as enhancedApi from '$lib/services/enhancedApi';
+import type { Asset, PriceResponse } from '$lib/types';
+import { assetCacheStatus } from '$lib/stores/assetStatusStore';
+import { devLog } from '$lib/utils/logger';
 
 /**
  * Get the current price for an asset with cache awareness
@@ -111,7 +113,7 @@ export async function getMultipleAssetPrices(
 		.map((status) => status.asset);
 
 	// Log cache efficiency information
-	console.log(
+	devLog.info(
 		`Cache efficiency: ${assetsWithValidCache.length}/${assets.length} assets have valid cache (${
 			assets.length > 0 ? Math.round((assetsWithValidCache.length / assets.length) * 100) : 0
 		}%)`

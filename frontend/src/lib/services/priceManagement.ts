@@ -1,4 +1,5 @@
-import type { Asset } from '$lib/types';
+import type { Asset, PriceResponse } from '$lib/types';
+import { devLog } from '$lib/utils/logger';
 import * as enhancedApi from './enhancedApi';
 
 export class PriceManagementService {
@@ -24,9 +25,8 @@ export class PriceManagementService {
 						`Fetching price for asset: ${asset.symbol}, type: ${asset.type}, forceRefresh: ${forceRefresh}`
 					);
 					try {
-						let priceData;
 						// Use the enhanced API with cache-first approach
-						priceData = await enhancedApi.getPrice(
+						const priceData = await enhancedApi.getPrice(
 							asset.symbol || '',
 							asset.type as 'stock' | 'crypto',
 							{
@@ -64,12 +64,12 @@ export class PriceManagementService {
 
 			this.assetPrices = newPricesMap;
 			this.pricesLoaded = true;
-			console.log('Updated assetPrices Map:', Array.from(this.assetPrices.entries()));
-			console.log('=== fetchAllCurrentPrices END ===');
+			devLog.debug('Updated assetPrices Map:', Array.from(this.assetPrices.entries()));
+			devLog.debug('=== fetchAllCurrentPrices END ===');
 
 			return this.assetPrices;
 		} catch (error) {
-			console.error('Failed to fetch current prices:', error);
+			devLog.error('Failed to fetch current prices:', error);
 			throw error;
 		}
 	}
@@ -79,7 +79,7 @@ export class PriceManagementService {
 			return 1; // Cash has no price, value is just quantity
 		}
 		const priceData = this.assetPrices.get(asset.id);
-		console.log(
+		devLog.debug(
 			`getCurrentPrice debug - Asset ID: ${asset.id}, Symbol: ${asset.symbol}, Price data:`,
 			priceData,
 			`Price: ${priceData?.price || 0}`
@@ -95,10 +95,10 @@ export class PriceManagementService {
 		return this.pricesLoaded;
 	}
 
-	setPrices(prices: Map<number, { price: number; currency: string }>): void {
-		this.assetPrices = new Map(prices);
+	setPrices(pricesMap: Map<number, { price: number; currency: string }>): void {
+		devLog.info(`PriceManagementService: Set ${pricesMap.size} prices`);
+		this.assetPrices = pricesMap;
 		this.pricesLoaded = true;
-		console.log(`PriceManagementService: Set ${this.assetPrices.size} prices`);
 	}
 
 	updatePrices(newPrices: Map<number, { price: number; currency: string }>): void {

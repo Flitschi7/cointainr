@@ -1,8 +1,5 @@
 <script lang="ts">
-	import {
-		cacheStatusService,
-		CacheStatusType
-	} from '$lib/services/cacheStatus';
+	import { cacheStatusService, CacheStatusType } from '$lib/services/cacheStatus';
 	import type { AssetCacheStatus } from '$lib/types';
 	import { getContext } from 'svelte';
 
@@ -15,10 +12,10 @@
 
 	// Get cache status from context (provided by CacheStatusProvider)
 	const cacheContext = getContext('cacheStatus') as { assetCacheStatus: any } | undefined;
-	
+
 	// Enhanced cache status object
 	let cacheStatus: AssetCacheStatus | null = null;
-	
+
 	// Get the store from context at the top level
 	let assetCacheStatusStore: any = null;
 	if (cacheContext) {
@@ -150,7 +147,9 @@
 
 	// Get cache status from the centralized store
 	$: if (assetCacheStatusStore && $assetCacheStatusStore && assetId !== null) {
-		cacheStatus = $assetCacheStatusStore.find((status: AssetCacheStatus) => status.asset_id === assetId) || null;
+		cacheStatus =
+			$assetCacheStatusStore.find((status: AssetCacheStatus) => status.asset_id === assetId) ||
+			null;
 	}
 
 	$: actuallyFresh = isActuallyFresh(cachedAt, cacheTtlMinutes, assetType);

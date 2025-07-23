@@ -4,7 +4,6 @@
 	import ProfitLossCell from '$lib/components/ProfitLossCell.svelte';
 	import CacheStatusBanner from '$lib/components/CacheStatusBanner.svelte';
 	import CurrencyRateDisplay from '$lib/components/CurrencyRateDisplay.svelte';
-	import { refreshAllPrices } from '$lib/services/api';
 	import * as enhancedApi from '$lib/services/enhancedApi';
 	import type { Asset } from '$lib/types';
 	import type { RefreshAllResponse, AssetCacheStatus } from '$lib/types';
@@ -16,6 +15,12 @@
 	import { PortfolioCalculationService } from '$lib/services/portfolioCalculations';
 	import { onMount, onDestroy } from 'svelte';
 	import { formatCurrency, formatPercentage, formatNumber } from '$lib/utils/numberFormat';
+	import { debounce } from 'lodash-es';
+
+	// Conditional logging - only in development
+	const isDev = import.meta.env.DEV;
+	const log = isDev ? console.log : () => {};
+	const debug = isDev ? console.debug : () => {};
 
 	/** @type {import('./$types').PageData} */
 	export let data;
@@ -68,9 +73,12 @@
 
 		if (pricesLoaded) {
 			const cacheInfo = data.cacheMetadata;
-			console.log(
-				`Using ${assetPrices.size} prices from initial page load (${cacheInfo?.cacheHits || 0} from cache, ${cacheInfo?.apiCalls || 0} from API, ${cacheInfo?.cacheEfficiency?.toFixed(1) || 0}% cache efficiency)`
-			);
+			// Only log in development mode
+			if (isDev) {
+				log(
+					`Using ${assetPrices.size} prices from initial page load (${cacheInfo?.cacheHits || 0} from cache, ${cacheInfo?.apiCalls || 0} from API, ${cacheInfo?.cacheEfficiency?.toFixed(1) || 0}% cache efficiency)`
+				);
+			}
 		}
 	}
 
@@ -120,7 +128,9 @@
 	$: if (assetPrices.size > 0 && !priceManagementService.isPricesLoaded()) {
 		// Set the prices in the service
 		priceManagementService.setPrices(assetPrices);
-		console.log(`Initialized PriceManagementService with ${assetPrices.size} prices`);
+		if (isDev) {
+			log(`Initialized PriceManagementService with ${assetPrices.size} prices`);
+		}
 	}
 
 	// Helper function to get current price for an asset
@@ -132,8 +142,8 @@
 		// Get price from the price management service
 		const price = priceManagementService.getCurrentPrice(asset);
 
-		// Debug log for price retrieval
-		console.debug(`Price for asset ${asset.id} (${asset.symbol}): ${price}`);
+		// Debug log removed for performance - only in dev mode if needed
+		isDev && debug(`Price for asset ${asset.id} (${asset.symbol}): ${price}`);
 
 		return price;
 	}
@@ -252,21 +262,89 @@
 		}
 	}
 
-	// Cache for calculated values to avoid repeated API calls during sorting
+	// Calculation cache to avoid repeated expensive operations
+	let calculationCache = new Map();
+	let lastDataHash = '';
+	let lastFilterHash = '';
+
+	// Cached calculated values to avoid repeated API calls during sorting
 	let calculatedValues: Map<number, { value: number; profitLoss: number; performance: number }> =
 		new Map();
 
+	// Check if recalculation is needed
+	function shouldRecalculate(currentData: any[], cacheKey: string) {
+		const currentHash = JSON.stringify(
+			currentData.map((a) => ({
+				id: a.id,
+				symbol: a.symbol,
+				quantity: a.quantity,
+				purchase_price: a.purchase_price
+			}))
+		);
+		if (lastDataHash !== currentHash) {
+			lastDataHash = currentHash;
+			calculationCache.clear();
+			return true;
+		}
+		return false;
+	}
+
+	// Debounced filter update function
+	const debouncedFilterUpdate = debounce(() => {
+		const currentFilterHash = JSON.stringify({ filterLocation, filterSymbol, filterType });
+		if (currentFilterHash !== lastFilterHash) {
+			lastFilterHash = currentFilterHash;
+			updateFilteredAndSortedAssets();
+		}
+	}, 300);
+
+	// Consolidated function to update filtered and sorted assets
+	async function updateFilteredAndSortedAssets() {
+		// Filter assets
+		const newFilteredAssets = allAssets.filter((asset) => {
+			const locationMatch =
+				!filterLocation || asset.name.toLowerCase().includes(filterLocation.toLowerCase());
+			const symbolMatch =
+				!filterSymbol ||
+				(asset.symbol && asset.symbol.toLowerCase().includes(filterSymbol.toLowerCase()));
+			const typeMatch = filterType === 'all' || asset.type === filterType;
+			return locationMatch && symbolMatch && typeMatch;
+		});
+
+		filteredAssets = newFilteredAssets;
+
+		// Sort assets if needed
+		if (shouldRecalculate(newFilteredAssets, 'sort') || sortField || sortDirection) {
+			void (isDev && log('Updating sorted assets due to data change'));
+			sortedAssets = await sortAssets(newFilteredAssets, sortField, sortDirection);
+
+			// Update totals only when data actually changes
+			if (sortedAssets.length > 0 && pricesLoaded) {
+				await updateTotals();
+			}
+		}
+	}
+
 	// Function to calculate all values for sorting
 	async function calculateAllValuesForSorting(assets: Asset[]): Promise<void> {
-		console.log('Calculating all values for sorting...');
+		void (isDev && log('Calculating all values for sorting...'));
 
 		const calculations = assets.map(async (asset) => {
+			// Check cache first
+			const cacheKey = `${asset.id}-${asset.quantity}-${asset.purchase_price}`;
+			if (calculationCache.has(cacheKey)) {
+				calculatedValues.set(asset.id, calculationCache.get(cacheKey));
+				return;
+			}
+
 			if (asset.type === 'cash') {
-				calculatedValues.set(asset.id, {
+				const values = {
 					value: asset.quantity,
 					profitLoss: 0,
 					performance: 0
-				});
+				};
+				calculatedValues.set(asset.id, values);
+				calculationCache.set(cacheKey, values);
 				return;
 			}
 
@@ -277,23 +355,19 @@
 					calculatePerformancePercentage(asset)
 				]);
 
-				calculatedValues.set(asset.id, {
-					value,
-					profitLoss,
-					performance
-				});
+				const values = { value, profitLoss, performance };
+				calculatedValues.set(asset.id, values);
+				calculationCache.set(cacheKey, values);
 			} catch (error) {
 				console.error(`Error calculating values for ${asset.symbol}:`, error);
-				calculatedValues.set(asset.id, {
-					value: 0,
-					profitLoss: 0,
-					performance: 0
-				});
+				const fallbackValues = { value: 0, profitLoss: 0, performance: 0 };
+				calculatedValues.set(asset.id, fallbackValues);
+				calculationCache.set(cacheKey, fallbackValues);
 			}
 		});
 
 		await Promise.all(calculations);
-		console.log('All values calculated for sorting');
+		void (isDev && log('All values calculated for sorting'));
 	}
 
 	// Sort function
@@ -369,27 +443,15 @@
 		});
 	}
 
-	// Handle sort click
-	function handleSort(field: SortField) {
-		if (sortField === field) {
-			// Same field clicked, toggle direction
-			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
-		} else {
-			// New field clicked, default to ascending
-			sortField = field;
-			sortDirection = 'asc';
-		}
-	}
-
 	// Function to fetch all current prices for sorting and aggregation
 	async function fetchAllCurrentPrices(forceRefresh = false) {
-		console.log(`=== fetchAllCurrentPrices START (forceRefresh: ${forceRefresh}) ===`);
+		void (isDev && log(`=== fetchAllCurrentPrices START (forceRefresh: ${forceRefresh}) ===`));
 
 		try {
 			// If we already have prices loaded from the page data and we're not forcing refresh,
 			// we can skip the API calls and use what we have
 			if (pricesLoaded && !forceRefresh && assetPrices.size > 0) {
-				console.log('Using prices already loaded from page data (skipping API calls)');
+				void (isDev && log('Using prices already loaded from page data (skipping API calls)'));
 				return;
 			}
 
@@ -404,8 +466,8 @@
 			// Initialize the portfolio calculation service with the updated prices
 			portfolioCalculationService = new PortfolioCalculationService(assetPrices);
 
-			console.log('Updated assetPrices Map:', Array.from(assetPrices.entries()));
-			console.log('=== fetchAllCurrentPrices END ===');
+			void (isDev && log('Updated assetPrices Map:', Array.from(assetPrices.entries())));
+			void (isDev && log('=== fetchAllCurrentPrices END ==='));
 		} catch (error) {
 			console.error('Failed to fetch current prices:', error);
 
@@ -433,41 +495,31 @@
 		}
 	}
 
-	$: filteredAssets = allAssets.filter((asset) => {
-		const locationMatch =
-			!filterLocation || asset.name.toLowerCase().includes(filterLocation.toLowerCase());
-		const symbolMatch =
-			!filterSymbol ||
-			(asset.symbol && asset.symbol.toLowerCase().includes(filterSymbol.toLowerCase()));
-		const typeMatch = filterType === 'all' || asset.type === filterType;
-		return locationMatch && symbolMatch && typeMatch;
-	});
+	// Initialize filtered assets from initial data
+	let filteredAssets: Asset[] = allAssets;
+
+	// Reactive statement for filter changes - debounced
+	$: {
+		// Trigger debounced update when filters change
+		(filterLocation, filterSymbol, filterType);
+		debouncedFilterUpdate();
+	}
 
 	let sortedAssets: Asset[] = [];
 
-	// Function to update sorted assets
-	async function updateSortedAssets() {
-		console.log('updateSortedAssets called with filteredAssets length:', filteredAssets.length);
-		sortedAssets = await sortAssets(filteredAssets, sortField, sortDirection);
-		console.log('sortedAssets updated, length:', sortedAssets.length);
-		
-		// Manually trigger totals update after sorting is complete
-		if (sortedAssets.length > 0 && pricesLoaded) {
-			console.log('Manually triggering totals update after sorting');
-			await updateTotals();
+	// Updated sort handler that triggers immediate update
+	function handleSort(field: SortField) {
+		if (sortField === field) {
+			// Same field clicked, toggle direction
+			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+		} else {
+			// New field clicked, default to ascending
+			sortField = field;
+			sortDirection = 'asc';
 		}
-	}
 
-	// React to changes in filtered assets or sort parameters
-	$: if (filteredAssets && sortField && sortDirection) {
-		console.log('Reactive update 1: filteredAssets, sortField, sortDirection');
-		updateSortedAssets();
-	}
-
-	// Also update when data changes
-	$: if (filteredAssets) {
-		console.log('Reactive update 2: filteredAssets changed, length:', filteredAssets.length);
-		updateSortedAssets();
+		// Immediate update for sorting (not debounced)
+		updateFilteredAndSortedAssets();
 	}
 
 	// Reactive totals that update when pricesLoaded or totalCurrency changes
@@ -475,17 +527,41 @@
 	let totalYield = 0;
 	let totalPerformance = 0;
 
-	// Function to update all totals
+	// Prevent duplicate calculations
+	let isCalculatingTotals = false;
+
+	// Function to update all totals with caching
 	async function updateTotals() {
-		console.log('Calculating totals directly from visible assets');
+		if (!sortedAssets.length || !pricesLoaded || isCalculatingTotals) return;
+
+		isCalculatingTotals = true;
+		
+		// Check if totals need recalculation
+		const totalsKey = `totals-${totalCurrency}-${sortedAssets.length}`;
+		const assetsHash = JSON.stringify(
+			sortedAssets.map((a) => ({
+				id: a.id,
+				quantity: a.quantity,
+				purchase_price: a.purchase_price
+			}))
+		);
+
+		if (calculationCache.has(totalsKey) && calculationCache.get(totalsKey).hash === assetsHash) {
+			const cached = calculationCache.get(totalsKey);
+			totalValue = cached.totalValue;
+			totalYield = cached.totalYield;
+			totalPerformance = cached.totalPerformance;
+			isDev && log('Using cached totals');
+			isCalculatingTotals = false;
+			return;
+		}
+
+		isDev && log('Calculating totals directly from visible assets');
 
 		try {
-			// Calculate totals directly from the visible assets
 			let sumValue = 0;
 			let sumInvestment = 0;
 			let sumYield = 0;
-
-			console.log(`Processing ${sortedAssets.length} assets for totals`);
 
 			// Process each asset and convert to total currency
 			for (const asset of sortedAssets) {
@@ -506,29 +582,24 @@
 							cashValue = conversionData.converted;
 						} catch (error) {
 							console.error(`Failed to convert ${assetCurrency} to ${totalCurrency}:`, error);
-							// Use original value if conversion fails
 						}
 					}
 
-					console.log(
-						`Cash asset ${asset.name}: ${cashValue} ${totalCurrency} (from ${asset.quantity} ${assetCurrency})`
-					);
 					sumValue += cashValue;
 					continue;
 				}
 
 				// Handle stock and crypto assets
 				if (asset.type === 'stock' || asset.type === 'crypto') {
-					// Get the current price from the price management service
 					const currentPrice = getCurrentPrice(asset);
 					const quantity = asset.quantity || 0;
 					let currentValue = currentPrice * quantity;
 
-					// Get the price currency from the price data, not the asset currency!
+					// Get the price currency from the price data
 					const priceMap = priceManagementService.getPriceMap();
 					const priceData = priceMap.get(asset.id);
 					const priceCurrency = priceData?.currency || 'USD';
-					
+
 					// Convert the total value to target currency if needed
 					if (priceCurrency !== totalCurrency) {
 						try {
@@ -541,23 +612,16 @@
 							currentValue = conversionData.converted;
 						} catch (error) {
 							console.error(`Failed to convert ${priceCurrency} to ${totalCurrency}:`, error);
-							// Use original value if conversion fails
 						}
 					}
 
-					console.log(
-						`${asset.type} asset ${asset.symbol}: Price=${currentPrice} ${priceCurrency}, Quantity=${quantity}, Value=${currentValue} ${totalCurrency}`
-					);
-
-					// Add to total value
 					sumValue += currentValue;
 
 					// Calculate yield if purchase price is available
 					if (asset.purchase_price && asset.purchase_price > 0) {
 						let purchaseValue = asset.purchase_price * quantity;
-
-						// Convert purchase value to total currency if needed
 						const purchaseCurrency = asset.buy_currency || asset.currency || 'USD';
+
 						if (purchaseCurrency !== totalCurrency) {
 							try {
 								const conversionData = await enhancedApi.convertCurrency(
@@ -572,16 +636,10 @@
 									`Failed to convert purchase value from ${purchaseCurrency} to ${totalCurrency}:`,
 									error
 								);
-								// Use original value if conversion fails
 							}
 						}
 
 						const assetYield = currentValue - purchaseValue;
-
-						console.log(
-							`  Purchase: ${asset.purchase_price} ${purchaseCurrency}, PurchaseValue: ${purchaseValue} ${totalCurrency}, Yield: ${assetYield} ${totalCurrency}`
-						);
-
 						sumYield += assetYield;
 						sumInvestment += purchaseValue;
 					}
@@ -591,35 +649,38 @@
 			// Set the calculated totals
 			totalValue = sumValue;
 			totalYield = sumYield;
-
-			// Calculate performance percentage
 			totalPerformance = sumInvestment > 0 ? (sumYield / sumInvestment) * 100 : 0;
 
-			console.log('Calculated totals:', {
+			// Cache the results
+			calculationCache.set(totalsKey, {
+				hash: assetsHash,
 				totalValue,
 				totalYield,
-				totalPerformance,
-				sumInvestment,
-				currency: totalCurrency
+				totalPerformance
 			});
+
+			isDev &&
+				log('Calculated totals:', {
+					totalValue,
+					totalYield,
+					totalPerformance,
+					currency: totalCurrency
+				});
 		} catch (error) {
 			console.error('Error calculating totals:', error);
 			totalValue = 0;
 			totalYield = 0;
 			totalPerformance = 0;
+		} finally {
+			isCalculatingTotals = false;
 		}
 	}
 
-	// Update totals when prices are loaded or currency changes
-	$: if (pricesLoaded || totalCurrency) {
-		console.log('Trigger totals update:', { pricesLoaded, totalCurrency });
-		updateTotals();
-	}
-
-	// Also update totals when sorted assets change
-	$: if (sortedAssets && sortedAssets.length > 0) {
-		console.log('Assets changed, updating totals, sortedAssets length:', sortedAssets.length);
-		updateTotals();
+	// Single consolidated reactive statement for totals
+	$: {
+		if (pricesLoaded && totalCurrency && sortedAssets && sortedAssets.length > 0) {
+			updateTotals();
+		}
 	}
 
 	function openAddModal() {
@@ -649,7 +710,7 @@
 	}
 
 	// Periodically reload cache status to keep it current
-	let cacheStatusInterval: number;
+	let cacheStatusInterval: ReturnType<typeof setInterval> | null = null;
 	// Set up adaptive cache polling based on cache health
 	const setupAdaptiveCachePolling = () => {
 		// Get current cache health from metadata
@@ -684,7 +745,7 @@
 
 		// Use cache-first approach on page load
 		if (allAssets.length > 0) {
-			console.log('Fetching all prices on page load with cache-first approach');
+			isDev && log('Fetching all prices on page load with cache-first approach');
 			// Don't force refresh, use cache-first approach
 			await fetchAllCurrentPrices(false);
 
@@ -712,7 +773,7 @@
 		refreshResult = null;
 
 		try {
-			console.log('Manually refreshing all asset prices (bypassing cache)...');
+			isDev && log('Manually refreshing all asset prices (bypassing cache)...');
 
 			// Use the enhanced API to refresh all prices
 			refreshResult = await enhancedApi.refreshAllPrices();
@@ -732,7 +793,7 @@
 				await enhancedApi.getFrontendCacheStats();
 			}, 1500);
 
-			console.log('Manual price refresh completed successfully:', refreshResult);
+			isDev && log('Manual price refresh completed successfully:', refreshResult);
 
 			// Show success message if there were errors
 			if (refreshResult.errors > 0) {
@@ -1049,7 +1110,7 @@
 								tabindex="0"
 								on:click={() => openEditModal(asset)}
 								on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openEditModal(asset)}
-								class="hover:bg-surface focus:ring-primary cursor-pointer border-b border-gray-600 transition-colors focus:outline-none focus:ring-2"
+								class="hover:bg-surface focus:ring-primary cursor-pointer border-b border-gray-600 transition-colors focus:ring-2 focus:outline-none"
 								aria-label={`Edit asset ${asset.name}`}
 							>
 								<!-- 1. Location/Broker -->

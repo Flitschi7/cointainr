@@ -1,9 +1,8 @@
-
 <script>
-  import "../app.css";
-  import CacheStatusProvider from '$lib/components/CacheStatusProvider.svelte';
+	import '../app.css';
+	import CacheStatusProvider from '$lib/components/CacheStatusProvider.svelte';
 </script>
 
 <CacheStatusProvider>
-  <slot />
+	<slot />
 </CacheStatusProvider>
