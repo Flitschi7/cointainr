@@ -1,6 +1,6 @@
 <div align="center">
 
-![Cointainr Logo](./assets/logo.png)
+![Cointainr Logo](./assets/github-logo.png)
 
 _A modern, self-hosted portfolio tracking app with a focus on clarity, technology, and user data ownership._
 
