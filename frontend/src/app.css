@@ -42,3 +42,34 @@ table.rounded-table tbody tr:last-child td:first-child {
 table.rounded-table tbody tr:last-child td:last-child {
 	border-bottom-right-radius: 0.5rem;
 }
+
+/* Responsive table improvements */
+@media (max-width: 640px) {
+	.table-responsive {
+		font-size: 0.875rem;
+	}
+
+	/* Ensure minimum table width doesn't break on small screens */
+	.overflow-x-auto {
+		scrollbar-width: thin;
+		scrollbar-color: var(--color-gold) var(--color-surface);
+	}
+}
+
+/* Custom scrollbar for webkit browsers */
+.overflow-x-auto::-webkit-scrollbar {
+	height: 8px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-track {
+	background: var(--color-surface);
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb {
+	background: var(--color-gold);
+	border-radius: 4px;
+}
+
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+	background: #b8941f;
+}

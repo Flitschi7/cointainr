@@ -4,6 +4,10 @@
 	import ProfitLossCell from '$lib/components/ProfitLossCell.svelte';
 	import CacheStatusBanner from '$lib/components/CacheStatusBanner.svelte';
 	import CurrencyRateDisplay from '$lib/components/CurrencyRateDisplay.svelte';
+	import AssetTypePieChart from '$lib/components/AssetTypePieChart.svelte';
+	import BrokerPieChart from '$lib/components/BrokerPieChart.svelte';
+	import TopHoldings from '$lib/components/TopHoldings.svelte';
+	import AssetPerformanceChart from '$lib/components/AssetPerformanceChart.svelte';
 	import * as enhancedApi from '$lib/services/enhancedApi';
 	import type { Asset } from '$lib/types';
 	import type { RefreshAllResponse, AssetCacheStatus } from '$lib/types';
@@ -16,6 +20,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { formatCurrency, formatPercentage, formatNumber } from '$lib/utils/numberFormat';
 	import { debounce } from 'lodash-es';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 
 	// Conditional logging - only in development
 	const isDev = import.meta.env.DEV;
@@ -32,6 +38,36 @@
 	let refreshResult: RefreshAllResponse | null = null;
 	let refreshTrigger = 0;
 	let cacheStatusMap: Map<number, AssetCacheStatus> = new Map();
+
+	// Tab navigation state - derived from URL parameters
+	let activeTab: 'portfolio' | 'distribution' = 'portfolio';
+
+	// Tab definitions
+	const tabs = [
+		{ id: 'portfolio', label: 'Portfolio', icon: '📈' },
+		{ id: 'distribution', label: 'Distribution', icon: '📊' }
+	] as const;
+
+	// Update activeTab based on URL parameters
+	$: {
+		const tabParam = $page.url.searchParams.get('tab');
+		if (tabParam === 'distribution') {
+			activeTab = 'distribution';
+		} else {
+			activeTab = 'portfolio';
+		}
+	}
+
+	function setActiveTab(tabId: 'portfolio' | 'distribution') {
+		// Update URL without page reload
+		const url = new URL($page.url);
+		if (tabId === 'portfolio') {
+			url.searchParams.delete('tab'); // Default tab, no need for parameter
+		} else {
+			url.searchParams.set('tab', tabId);
+		}
+		goto(url.toString(), { replaceState: true, noScroll: true });
+	}
 
 	// Get cache status from context (provided by CacheStatusProvider)
 	const cacheContext = getContext('cacheStatus') as { assetCacheStatus: any } | undefined;
@@ -873,88 +909,114 @@
 	</Modal>
 {/if}
 
-<div class="bg-background text-text-light min-h-screen p-8">
-	<header class="mb-8">
-		<h1 class="font-headline text-gold text-4xl">Cointainr</h1>
+<div class="bg-background text-text-light min-h-screen p-4 sm:p-6 lg:p-8">
+	<header class="mb-6 sm:mb-8">
+		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+			<h1 class="font-headline text-gold text-2xl sm:text-3xl lg:text-4xl">Cointainr</h1>
+			
+			<!-- Tab Navigation -->
+			<nav class="flex-shrink-0">
+				<div class="bg-surface rounded-lg p-1">
+					<div class="flex space-x-1">
+						{#each tabs as tab}
+							<button
+								class="flex items-center justify-center gap-2 px-3 py-2 rounded-md font-medium transition-all duration-200 text-sm {activeTab === tab.id
+									? 'bg-background text-text-light border border-gray-600'
+									: 'text-gray-400 hover:text-text-light hover:bg-background/50'}"
+								on:click={() => setActiveTab(tab.id)}
+							>
+								<span class="text-base">{tab.icon}</span>
+								<span class="hidden sm:inline">{tab.label}</span>
+							</button>
+						{/each}
+					</div>
+				</div>
+			</nav>
+		</div>
 	</header>
 
-	<CacheStatusBanner {lastRefreshTime} />
-
-	<section class="bg-surface mb-8 flex items-center justify-between rounded-lg p-4">
-		<div class="flex items-center gap-4">
-			<input
-				type="text"
-				bind:value={filterLocation}
-				placeholder="Location/Broker..."
-				class="bg-background text-text-light rounded p-2"
-			/>
-			<input
-				type="text"
-				bind:value={filterSymbol}
-				placeholder="Symbol/ISIN..."
-				class="bg-background text-text-light rounded p-2"
-			/>
-			<select bind:value={filterType} class="bg-background text-text-light rounded p-2">
-				<option value="all">All Types</option>
-				<option value="cash">Cash</option>
-				<option value="stock">Stock</option>
-				<option value="crypto">Crypto</option>
-			</select>
-			<div class="ml-4 flex items-center gap-2 border-l border-gray-600 pl-4">
-				<label for="totalCurrency" class="text-text-light text-sm">Totals in:</label>
-				<select
-					id="totalCurrency"
-					bind:value={totalCurrency}
-					class="bg-background text-text-light rounded border border-gray-600 px-3 py-1"
-				>
-					<option value="EUR">EUR</option>
-					<option value="USD">USD</option>
-					<option value="GBP">GBP</option>
-					<option value="CHF">CHF</option>
+	<!-- Filters Section -->
+	<section class="bg-surface mb-6 sm:mb-8 rounded-lg p-4">
+		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+			<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+				<input
+					type="text"
+					bind:value={filterLocation}
+					placeholder="Location/Broker..."
+					class="bg-background text-text-light rounded p-2 w-full sm:w-auto"
+				/>
+				<input
+					type="text"
+					bind:value={filterSymbol}
+					placeholder="Symbol/ISIN..."
+					class="bg-background text-text-light rounded p-2 w-full sm:w-auto"
+				/>
+				<select bind:value={filterType} class="bg-background text-text-light rounded p-2 w-full sm:w-auto">
+					<option value="all">All Types</option>
+					<option value="cash">Cash</option>
+					<option value="stock">Stock</option>
+					<option value="crypto">Crypto</option>
 				</select>
-
-				<!-- Compact Currency Rate Display -->
-				<CurrencyRateDisplay baseCurrency={totalCurrency} assets={allAssets} />
+				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:border-l sm:border-gray-600 sm:pl-4">
+					<label for="totalCurrency" class="text-text-light text-sm">Totals in:</label>
+					<div class="flex items-center gap-2">
+						<select
+							id="totalCurrency"
+							bind:value={totalCurrency}
+							class="bg-background text-text-light rounded border border-gray-600 px-3 py-1"
+						>
+							<option value="EUR">EUR</option>
+							<option value="USD">USD</option>
+							<option value="GBP">GBP</option>
+							<option value="CHF">CHF</option>
+						</select>
+						<!-- Compact Currency Rate Display -->
+						<CurrencyRateDisplay baseCurrency={totalCurrency} assets={allAssets} />
+					</div>
+				</div>
 			</div>
-		</div>
-		<div class="flex items-center gap-4">
-			<!-- Cache status is now handled by CacheStatusBanner component -->
-			<button
-				on:click={handleRefreshAllPrices}
-				disabled={isRefreshing}
-				class="bg-primary border-primary flex items-center justify-center gap-2 rounded border p-2 font-bold text-white hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-				title="Force refresh all prices (bypass cache)"
-				aria-label="Force refresh all prices"
-			>
-				<svg
-					class="h-5 w-5"
-					class:animate-spin={isRefreshing}
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-					xmlns="http://www.w3.org/2000/svg"
+			<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+				<!-- Cache status is now handled by CacheStatusBanner component -->
+				<button
+					on:click={handleRefreshAllPrices}
+					disabled={isRefreshing}
+					class="bg-primary border-primary flex items-center justify-center gap-2 rounded border p-2 font-bold text-white hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
+					title="Force refresh all prices (bypass cache)"
+					aria-label="Force refresh all prices"
 				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-					></path>
-				</svg>
-				<span class="hidden text-sm sm:inline">Force Refresh</span>
-			</button>
-			<button
-				on:click={openAddModal}
-				class="bg-gold rounded px-4 py-2 font-bold text-white hover:opacity-80"
-			>
-				Add Asset
-			</button>
+					<svg
+						class="h-5 w-5"
+						class:animate-spin={isRefreshing}
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						xmlns="http://www.w3.org/2000/svg"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+						></path>
+					</svg>
+					<span class="text-sm">Force Refresh</span>
+				</button>
+				<button
+					on:click={openAddModal}
+					class="bg-gold rounded px-4 py-2 font-bold text-white hover:opacity-80 w-full sm:w-auto"
+				>
+					Add Asset
+				</button>
+			</div>
 		</div>
 	</section>
 
-	<main class="bg-surface rounded-lg p-6 shadow-lg">
-		<div class="mb-4 flex items-center justify-between">
-			<h2 class="font-headline text-2xl">Assets</h2>
+	<!-- Tab Content -->
+	{#if activeTab === 'portfolio'}
+		<!-- Portfolio Tab Content -->
+		<main class="bg-surface rounded-lg p-4 sm:p-6 shadow-lg">
+		<div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+			<h2 class="font-headline text-xl sm:text-2xl">Assets</h2>
 			<div class="text-sm text-gray-400">
 				Last refresh: {formatLastRefresh(lastRefreshTime)}
 			</div>
@@ -962,12 +1024,12 @@
 
 		<!-- No need for additional refresh button as we have Force Refresh in the nav bar -->
 		{#if sortedAssets.length > 0}
-			<div class="overflow-hidden rounded-lg">
-				<table class="rounded-table w-full border-collapse border border-gray-600 font-mono">
+			<div class="overflow-x-auto rounded-lg">
+				<table class="rounded-table table-responsive w-full min-w-[800px] border-collapse border border-gray-600 font-mono text-sm">
 					<thead>
 						<tr class="bg-background border-b-2 border-gray-600">
 							<th
-								class="hover:bg-surface col-span-2 cursor-pointer border-r border-gray-600 px-4 py-3 text-left font-bold transition-colors"
+								class="hover:bg-surface col-span-2 cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-left font-bold transition-colors"
 								on:click={() => handleSort('location')}
 							>
 								<div class="flex items-center justify-between">
@@ -982,7 +1044,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-left font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-left font-bold transition-colors"
 								on:click={() => handleSort('type')}
 							>
 								<div class="flex items-center justify-between">
@@ -997,7 +1059,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-left font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-left font-bold transition-colors"
 								on:click={() => handleSort('asset')}
 							>
 								<div class="flex items-center justify-between">
@@ -1012,7 +1074,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-right font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
 								on:click={() => handleSort('quantity')}
 							>
 								<div class="flex items-center justify-end">
@@ -1027,7 +1089,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-right font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
 								on:click={() => handleSort('purchasePrice')}
 							>
 								<div class="flex items-center justify-end">
@@ -1042,7 +1104,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-right font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
 								on:click={() => handleSort('currentPrice')}
 							>
 								<div class="flex items-center justify-end">
@@ -1057,7 +1119,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-right font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
 								on:click={() => handleSort('value')}
 							>
 								<div class="flex items-center justify-end">
@@ -1072,7 +1134,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-right font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
 								on:click={() => handleSort('yield')}
 							>
 								<div class="flex items-center justify-end">
@@ -1087,7 +1149,7 @@
 								</div>
 							</th>
 							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-4 py-3 text-right font-bold transition-colors"
+								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
 								on:click={() => handleSort('performance')}
 							>
 								<div class="flex items-center justify-end">
@@ -1101,7 +1163,7 @@
 									{/if}
 								</div>
 							</th>
-							<th class="px-4 py-3 text-center font-bold">Status</th>
+							<th class="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold">Status</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -1114,18 +1176,18 @@
 								aria-label={`Edit asset ${asset.name}`}
 							>
 								<!-- 1. Location/Broker -->
-								<td class="col-span-2 border-r border-gray-600 px-4 py-3">{asset.name}</td>
+								<td class="col-span-2 border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3">{asset.name}</td>
 
 								<!-- 2. Type -->
-								<td class="border-r border-gray-600 px-4 py-3 capitalize">{asset.type}</td>
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 capitalize">{asset.type}</td>
 
 								<!-- 3. Asset -->
-								<td class="border-r border-gray-600 px-4 py-3"
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3"
 									>{asset.assetname ?? asset.symbol ?? '-'}</td
 								>
 
 								<!-- 4. Quantity -->
-								<td class="border-r border-gray-600 px-4 py-3 text-right">
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										-
 									{:else}
@@ -1134,7 +1196,7 @@
 								</td>
 
 								<!-- 5. Purchase Price -->
-								<td class="border-r border-gray-600 px-4 py-3 text-right">
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.purchase_price}
 										{formatCurrency(
 											asset.purchase_price,
@@ -1146,7 +1208,7 @@
 								</td>
 
 								<!-- 6. Current Price -->
-								<td class="border-r border-gray-600 px-4 py-3 text-right">
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										-
 									{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -1164,7 +1226,7 @@
 								</td>
 
 								<!-- 7. Value -->
-								<td class="border-r border-gray-600 px-4 py-3 text-right">
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										{formatCurrency(asset.quantity, asset.currency ?? 'EUR')}
 									{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -1182,7 +1244,7 @@
 								</td>
 
 								<!-- 8. Yield -->
-								<td class="border-r border-gray-600 px-4 py-3 text-right">
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										-
 									{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -1202,7 +1264,7 @@
 								</td>
 
 								<!-- 9. Performance -->
-								<td class="border-r border-gray-600 px-4 py-3 text-right">
+								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										-
 									{:else if asset.type === 'stock' || asset.type === 'crypto'}
@@ -1222,7 +1284,7 @@
 								</td>
 
 								<!-- 10. Status -->
-								<td class="px-4 py-3 text-center">
+								<td class="px-2 py-2 sm:px-4 sm:py-3 text-center">
 									{#if cacheStatusMap.has(asset.id)}
 										{@const cacheStatus = cacheStatusMap.get(asset.id)}
 										{#if cacheStatus}
@@ -1286,4 +1348,58 @@
 			<p class="py-4 text-center">No matching assets found.</p>
 		{/if}
 	</main>
+
+	{:else if activeTab === 'distribution'}
+		<!-- Distribution Tab Content -->
+		<main class="bg-surface rounded-lg p-4 sm:p-6 shadow-lg">
+			<div class="mb-4">
+				<h2 class="font-headline text-xl sm:text-2xl">Asset Distribution</h2>
+			</div>
+			
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+				<!-- Asset Type Distribution Chart -->
+				<div class="bg-background rounded-lg p-6">
+					<h3 class="font-headline text-lg mb-4 text-gold">By Asset Type</h3>
+					<AssetTypePieChart 
+						assets={sortedAssets} 
+						{totalCurrency} 
+						{assetPrices}
+						{refreshTrigger}
+					/>
+				</div>
+				
+				<div class="bg-background rounded-lg p-6">
+					<h3 class="font-headline text-lg mb-4 text-gold">By Broker</h3>
+					<BrokerPieChart 
+						assets={sortedAssets} 
+						{totalCurrency} 
+						{assetPrices}
+						{refreshTrigger}
+					/>
+				</div>
+				
+				<div class="bg-background rounded-lg p-6">
+					<h3 class="font-headline text-lg mb-4 text-gold">Asset Performance</h3>
+					<AssetPerformanceChart 
+						assets={sortedAssets} 
+						{totalCurrency} 
+						{assetPrices}
+						{refreshTrigger}
+					/>
+				</div>
+				
+				<div class="bg-background rounded-lg p-6">
+					<h3 class="font-headline text-lg mb-4 text-gold">Top Holdings</h3>
+					<TopHoldings 
+						assets={sortedAssets} 
+						{totalCurrency} 
+						{assetPrices}
+						{refreshTrigger}
+						maxHoldings={10}
+					/>
+				</div>
+			</div>
+		</main>
+	{/if}
+
 </div>
