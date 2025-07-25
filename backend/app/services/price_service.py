@@ -1,11 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud import crud_price_cache
 from app.core.config import settings
+from app.services.cache_management import cache_management_service
 import finnhub
 import yfinance as yf
 import httpx
 from typing import Dict, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 class PriceService:
@@ -22,7 +23,11 @@ class PriceService:
             self.finnhub_client = None
 
     async def get_stock_price(
-        self, db: AsyncSession, identifier: str, force_refresh: bool = False
+        self,
+        db: AsyncSession,
+        identifier: str,
+        force_refresh: bool = False,
+        allow_expired: bool = False,
     ) -> Dict[str, any]:
         """
         Get stock price with caching.
@@ -33,17 +38,26 @@ class PriceService:
             force_refresh: If True, bypass cache and fetch fresh data
 
         Returns:
-            Dict with symbol, price, currency, and cache info
+            Dict with symbol, price, currency, cache info, and expiration details
         """
         # Check cache first (unless force refresh)
         if not force_refresh:
-            cached_price = await crud_price_cache.get_cached_price(
-                db=db,
-                symbol=identifier,
-                asset_type="stock",
-                max_age_minutes=settings.PRICE_CACHE_MINUTES,
+            # Get any cached entry regardless of age for validation
+            cached_price = await crud_price_cache.get_cache_by_symbol(
+                db=db, symbol=identifier, asset_type="stock"
             )
-            if cached_price:
+
+            # Use centralized cache validation
+            if cached_price and (
+                cache_management_service.is_price_cache_valid(cached_price)
+                or allow_expired
+            ):
+                cache_expiration = cache_management_service.get_price_cache_expiration(
+                    cached_price
+                )
+                cache_age = cache_management_service.get_cache_age_minutes(cached_price)
+                is_valid = cache_management_service.is_price_cache_valid(cached_price)
+
                 return {
                     "symbol": cached_price.symbol,
                     "price": cached_price.price,
@@ -51,6 +65,18 @@ class PriceService:
                     "cached": True,
                     "fetched_at": cached_price.fetched_at,
                     "source": cached_price.source,
+                    "cache_valid_until": (
+                        cache_expiration.isoformat() if cache_expiration else None
+                    ),
+                    "cache_status": {
+                        "is_valid": is_valid,
+                        "age_minutes": cache_age,
+                        "expires_at": (
+                            cache_expiration.isoformat() if cache_expiration else None
+                        ),
+                        "ttl_minutes": settings.PRICE_CACHE_MINUTES,
+                        "using_expired_cache": allow_expired and not is_valid,
+                    },
                 }
 
         # Fetch fresh data
@@ -115,10 +141,39 @@ class PriceService:
                         f"[PriceService] Yahoo Finance error for symbol {symbol}: {e}"
                     )
 
+        # Handle API failure scenarios with cache fallback
         if price is None:
-            raise ValueError(f"Could not fetch price for {identifier}")
+            # Try to fall back to any cached data (even if expired)
+            cached_price = await crud_price_cache.get_cache_by_symbol(
+                db=db, symbol=identifier, asset_type="stock"
+            )
+            if cached_price:
+                cache_expiration = cache_management_service.get_price_cache_expiration(
+                    cached_price
+                )
+                cache_age = cache_management_service.get_cache_age_minutes(cached_price)
+                return {
+                    "symbol": cached_price.symbol,
+                    "price": cached_price.price,
+                    "currency": cached_price.currency,
+                    "cached": True,
+                    "fetched_at": cached_price.fetched_at,
+                    "source": cached_price.source,
+                    "cache_valid_until": (
+                        cache_expiration.isoformat() if cache_expiration else None
+                    ),
+                    "cache_expired": not cache_management_service.is_price_cache_valid(
+                        cached_price
+                    ),
+                    "cache_age_minutes": cache_age,
+                    "api_error": True,
+                }
+            else:
+                raise ValueError(
+                    f"Could not fetch price for {identifier} and no cached data available"
+                )
 
-        # Cache the result
+        # Cache the fresh result
         await crud_price_cache.update_or_create_price_cache(
             db=db,
             symbol=symbol,
@@ -128,17 +183,33 @@ class PriceService:
             source=source,
         )
 
+        # Calculate cache expiration for fresh data
+        now = datetime.utcnow()
+        cache_expiration = now + timedelta(minutes=settings.PRICE_CACHE_MINUTES)
+
         return {
             "symbol": symbol,
             "price": price,
             "currency": currency,
             "cached": False,
-            "fetched_at": datetime.utcnow(),
+            "fetched_at": now,
             "source": source,
+            "cache_valid_until": cache_expiration.isoformat(),
+            "cache_status": {
+                "is_valid": True,  # Just created, so it's valid
+                "age_minutes": 0,
+                "expires_at": cache_expiration.isoformat(),
+                "ttl_minutes": settings.PRICE_CACHE_MINUTES,
+                "using_expired_cache": False,
+            },
         }
 
     async def get_crypto_price(
-        self, db: AsyncSession, symbol: str, force_refresh: bool = False
+        self,
+        db: AsyncSession,
+        symbol: str,
+        force_refresh: bool = False,
+        allow_expired: bool = False,
     ) -> Dict[str, any]:
         """
         Get cryptocurrency price with caching.
@@ -151,15 +222,81 @@ class PriceService:
         Returns:
             Dict with symbol, price, currency, and cache info
         """
+        # Map common crypto symbols to CoinGecko IDs
+        symbol_mapping = {
+            "BTC": "bitcoin",
+            "ETH": "ethereum",
+            "ADA": "cardano",
+            "DOT": "polkadot",
+            "LINK": "chainlink",
+            "LTC": "litecoin",
+            "XRP": "ripple",
+            "BCH": "bitcoin-cash",
+            "BNB": "binancecoin",
+            "SOL": "solana",
+            "MATIC": "matic-network",
+            "AVAX": "avalanche-2",
+            "ATOM": "cosmos",
+            "ALGO": "algorand",
+            "XLM": "stellar",
+            "VET": "vechain",
+            "ICP": "internet-computer",
+            "FIL": "filecoin",
+            "TRX": "tron",
+            "ETC": "ethereum-classic",
+            "THETA": "theta-token",
+            "XMR": "monero",
+            "EOS": "eos",
+            "AAVE": "aave",
+            "MKR": "maker",
+            "COMP": "compound-governance-token",
+            "UNI": "uniswap",
+            "SUSHI": "sushi",
+            "YFI": "yearn-finance",
+            "SNX": "havven",
+            "CRV": "curve-dao-token",
+            "1INCH": "1inch",
+            "BAL": "balancer",
+            "ZRX": "0x",
+            "REN": "republic-protocol",
+            "KNC": "kyber-network-crystal",
+            "LRC": "loopring",
+            "BAND": "band-protocol",
+            "STORJ": "storj",
+            "BAT": "basic-attention-token",
+            "ZIL": "zilliqa",
+            "ENJ": "enjincoin",
+            "MANA": "decentraland",
+            "SAND": "the-sandbox",
+            "GALA": "gala",
+            "CHZ": "chiliz",
+            "FLOW": "flow",
+            "AXS": "axie-infinity",
+            "DOGE": "dogecoin",
+            "SHIB": "shiba-inu",
+        }
+
+        # Get CoinGecko ID for the symbol
+        coingecko_id = symbol_mapping.get(symbol.upper(), symbol.lower())
+
         # Check cache first (unless force refresh)
         if not force_refresh:
-            cached_price = await crud_price_cache.get_cached_price(
-                db=db,
-                symbol=symbol.upper(),
-                asset_type="crypto",
-                max_age_minutes=settings.PRICE_CACHE_MINUTES,
+            # Get any cached entry regardless of age for validation
+            cached_price = await crud_price_cache.get_cache_by_symbol(
+                db=db, symbol=symbol.upper(), asset_type="crypto"
             )
-            if cached_price:
+
+            # Use centralized cache validation
+            if cached_price and (
+                cache_management_service.is_price_cache_valid(cached_price)
+                or allow_expired
+            ):
+                cache_expiration = cache_management_service.get_price_cache_expiration(
+                    cached_price
+                )
+                cache_age = cache_management_service.get_cache_age_minutes(cached_price)
+                is_valid = cache_management_service.is_price_cache_valid(cached_price)
+
                 return {
                     "symbol": cached_price.symbol,
                     "price": cached_price.price,
@@ -167,23 +304,35 @@ class PriceService:
                     "cached": True,
                     "fetched_at": cached_price.fetched_at,
                     "source": cached_price.source,
+                    "cache_valid_until": (
+                        cache_expiration.isoformat() if cache_expiration else None
+                    ),
+                    "cache_status": {
+                        "is_valid": is_valid,
+                        "age_minutes": cache_age,
+                        "expires_at": (
+                            cache_expiration.isoformat() if cache_expiration else None
+                        ),
+                        "ttl_minutes": settings.PRICE_CACHE_MINUTES,
+                        "using_expired_cache": allow_expired and not is_valid,
+                    },
                 }
 
         # Fetch fresh data from CoinGecko
         try:
             async with httpx.AsyncClient() as client:
-                # Use CoinGecko API (free tier)
-                url = f"https://api.coingecko.com/api/v3/simple/price?ids={symbol.lower()}&vs_currencies=usd"
+                # Use CoinGecko API (free tier) with proper ID mapping
+                url = f"https://api.coingecko.com/api/v3/simple/price?ids={coingecko_id}&vs_currencies=usd"
                 response = await client.get(url)
 
                 if response.status_code == 200:
                     data = response.json()
-                    if symbol.lower() in data and "usd" in data[symbol.lower()]:
-                        price = data[symbol.lower()]["usd"]
+                    if coingecko_id in data and "usd" in data[coingecko_id]:
+                        price = data[coingecko_id]["usd"]
                         currency = "USD"
                         source = "coingecko"
 
-                        # Cache the result
+                        # Cache the fresh result
                         await crud_price_cache.update_or_create_price_cache(
                             db=db,
                             symbol=symbol.upper(),
@@ -193,18 +342,61 @@ class PriceService:
                             source=source,
                         )
 
+                        # Calculate cache expiration for fresh data
+                        now = datetime.utcnow()
+                        cache_expiration = now + timedelta(
+                            minutes=settings.PRICE_CACHE_MINUTES
+                        )
+
                         return {
                             "symbol": symbol.upper(),
                             "price": price,
                             "currency": currency,
                             "cached": False,
-                            "fetched_at": datetime.utcnow(),
+                            "fetched_at": now,
                             "source": source,
+                            "cache_valid_until": cache_expiration.isoformat(),
+                            "cache_status": {
+                                "is_valid": True,  # Just created, so it's valid
+                                "age_minutes": 0,
+                                "expires_at": cache_expiration.isoformat(),
+                                "ttl_minutes": settings.PRICE_CACHE_MINUTES,
+                                "using_expired_cache": False,
+                            },
                         }
         except Exception as e:
             print(f"[PriceService] CoinGecko error for {symbol}: {e}")
 
-        raise ValueError(f"Could not fetch price for crypto {symbol}")
+        # Handle API failure scenarios with cache fallback
+        # Try to fall back to any cached data (even if expired)
+        cached_price = await crud_price_cache.get_cache_by_symbol(
+            db=db, symbol=symbol.upper(), asset_type="crypto"
+        )
+        if cached_price:
+            cache_expiration = cache_management_service.get_price_cache_expiration(
+                cached_price
+            )
+            cache_age = cache_management_service.get_cache_age_minutes(cached_price)
+            return {
+                "symbol": cached_price.symbol,
+                "price": cached_price.price,
+                "currency": cached_price.currency,
+                "cached": True,
+                "fetched_at": cached_price.fetched_at,
+                "source": cached_price.source,
+                "cache_valid_until": (
+                    cache_expiration.isoformat() if cache_expiration else None
+                ),
+                "cache_expired": not cache_management_service.is_price_cache_valid(
+                    cached_price
+                ),
+                "cache_age_minutes": cache_age,
+                "api_error": True,
+            }
+        else:
+            raise ValueError(
+                f"Could not fetch price for crypto {symbol} and no cached data available"
+            )
 
 
 # Global instance

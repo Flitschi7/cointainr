@@ -1,0 +1,71 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+docs/
+planning/
+CURRENT_ISSUES.md
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Frontend
+frontend/node_modules/
+frontend/.svelte-kit/
+# Don't ignore frontend/build/ as we need it for the Docker build
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+frontend/test-results/
+frontend/playwright-report/
+frontend/verify-fixes.js
+frontend/test-currency-detection.js
+
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/cointainr.db
+backend/.env
+
+# Logs
+*.log
+logs/
+
+# Cache directories
+.cache/
+.npm/
+.yarn/
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+.temp/
+
+# Environment files (will be provided via docker-compose)
+.env
+.env.local
+.env.*.local
+
+# Kiro IDE files
+.kiro/

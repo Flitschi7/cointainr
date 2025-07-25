@@ -1,0 +1,133 @@
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - main
+      - beta
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version info
+        id: version
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            # Get the latest tag, if no tags exist, start with v0.0.0
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            VERSION=${LATEST_TAG#v}
+            
+            # If current version is 0.0.0 (no previous tags), start with 1.0.0
+            if [ "$VERSION" = "0.0.0" ]; then
+              NEXT_VERSION="1.0.0"
+            else
+              # Split version into parts and increment patch
+              IFS='.' read -ra VERSION_PARTS <<< "$VERSION"
+              MAJOR=${VERSION_PARTS[0]}
+              MINOR=${VERSION_PARTS[1]}
+              PATCH=${VERSION_PARTS[2]}
+              
+              # Check commit messages for version bump type
+              COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
+              
+              if echo "$COMMITS" | grep -qiE "\[breaking\]|\[major\]"; then
+                # Major version bump
+                MAJOR=$((MAJOR + 1))
+                MINOR=0
+                PATCH=0
+              elif echo "$COMMITS" | grep -qiE "\[feat\]|\[feature\]|\[minor\]"; then
+                # Minor version bump
+                MINOR=$((MINOR + 1))
+                PATCH=0
+              else
+                # Patch version bump
+                PATCH=$((PATCH + 1))
+              fi
+              
+              NEXT_VERSION="$MAJOR.$MINOR.$PATCH"
+            fi
+            
+            echo "version=$NEXT_VERSION" >> $GITHUB_OUTPUT
+            echo "create_release=true" >> $GITHUB_OUTPUT
+            echo "latest_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" = "refs/heads/beta" ]; then
+            echo "version=beta" >> $GITHUB_OUTPUT
+            echo "create_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "version=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+            echo "create_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # Set latest tag for main branch
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            # Set version tag for main branch
+            type=raw,value=v${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=${{ steps.version.outputs.version }},enable=${{ github.ref == 'refs/heads/main' }}
+            # Set beta tag for beta branch
+            type=raw,value=beta,enable=${{ github.ref == 'refs/heads/beta' }}
+            # Set PR tag for pull requests
+            type=raw,value=pr-${{ github.event.number }},enable=${{ github.event_name == 'pull_request' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create Release
+        if: steps.version.outputs.create_release == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## 🚀 Cointainr Release v${{ steps.version.outputs.version }}
+
+            ### 📦 Docker Image
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}:latest
+            docker pull ghcr.io/${{ github.repository }}:v${{ steps.version.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

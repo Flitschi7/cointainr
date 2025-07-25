@@ -37,21 +37,33 @@ async def get_cached_price(
     Returns:
         PriceCache: cached price entry if found and fresh, None otherwise
     """
-    cutoff_time = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+    # Try to use optimized batch query implementation if available
+    try:
+        from app.services.optimized_cache_queries import get_price_cache_batch
 
-    result = await db.execute(
-        select(PriceCache)
-        .where(
-            and_(
-                PriceCache.symbol == symbol,
-                PriceCache.asset_type == asset_type,
-                PriceCache.fetched_at >= cutoff_time,
-            )
+        # Use batch query with a single symbol
+        cache_entries = await get_price_cache_batch(
+            db, [symbol], asset_type, max_age_minutes
         )
-        .order_by(PriceCache.fetched_at.desc())
-        .limit(1)
-    )
-    return result.scalar_one_or_none()
+        return cache_entries.get(symbol)
+
+    except ImportError:
+        # Fall back to original implementation
+        cutoff_time = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+
+        result = await db.execute(
+            select(PriceCache)
+            .where(
+                and_(
+                    PriceCache.symbol == symbol,
+                    PriceCache.asset_type == asset_type,
+                    PriceCache.fetched_at >= cutoff_time,
+                )
+            )
+            .order_by(PriceCache.fetched_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
 
 
 async def get_cache_by_symbol(
@@ -104,6 +116,57 @@ async def update_or_create_price_cache(
     return await create_price_cache(db=db, cache_in=cache_data)
 
 
+async def get_cached_prices_batch(
+    db: AsyncSession, symbols: list[str], asset_type: str, max_age_minutes: int = 15
+) -> dict[str, PriceCache]:
+    """
+    Get cached prices for multiple symbols in a single query.
+
+    This optimized function fetches multiple cache entries in a single database query,
+    reducing the number of round-trips to the database.
+
+    Args:
+        db: AsyncSession - database session
+        symbols: List[str] - list of asset symbols to fetch
+        asset_type: str - 'stock' or 'crypto'
+        max_age_minutes: int - maximum age of cache entries in minutes
+
+    Returns:
+        Dict mapping symbols to their cache entries
+    """
+    # Try to use optimized implementation if available
+    try:
+        from app.services.optimized_cache_queries import get_price_cache_batch
+
+        return await get_price_cache_batch(db, symbols, asset_type, max_age_minutes)
+    except ImportError:
+        # Fall back to a less optimized but still batched implementation
+        cutoff_time = datetime.utcnow() - timedelta(minutes=max_age_minutes)
+
+        # Get all matching cache entries in a single query
+        result = await db.execute(
+            select(PriceCache)
+            .where(
+                and_(
+                    PriceCache.symbol.in_(symbols),
+                    PriceCache.asset_type == asset_type,
+                    PriceCache.fetched_at >= cutoff_time,
+                )
+            )
+            .order_by(PriceCache.symbol, PriceCache.fetched_at.desc())
+        )
+
+        all_entries = result.scalars().all()
+
+        # Create a dictionary of symbol -> latest cache entry
+        cache_dict = {}
+        for entry in all_entries:
+            if entry.symbol not in cache_dict:
+                cache_dict[entry.symbol] = entry
+
+        return cache_dict
+
+
 async def cleanup_old_cache_entries(db: AsyncSession, max_age_days: int = 30):
     """
     Remove cache entries older than specified days.
@@ -112,15 +175,32 @@ async def cleanup_old_cache_entries(db: AsyncSession, max_age_days: int = 30):
         db: AsyncSession - database session
         max_age_days: int - maximum age of cache entries in days (default: 30)
     """
-    cutoff_time = datetime.utcnow() - timedelta(days=max_age_days)
+    # Try to use optimized implementation if available
+    try:
+        from app.services.optimized_cache_queries import cleanup_cache_optimized
 
-    result = await db.execute(
-        select(PriceCache).where(PriceCache.fetched_at < cutoff_time)
-    )
-    old_entries = result.scalars().all()
+        result = await cleanup_cache_optimized(db)
+        return result.get("price_cache_deleted", 0)
+    except ImportError:
+        # Fall back to original implementation
+        cutoff_time = datetime.utcnow() - timedelta(days=max_age_days)
 
-    for entry in old_entries:
-        await db.delete(entry)
+        # Use a more efficient batch delete operation
+        from sqlalchemy import delete
 
-    await db.commit()
-    return len(old_entries)
+        # Count entries to be deleted first
+        count_query = (
+            select(func.count())
+            .select_from(PriceCache)
+            .where(PriceCache.fetched_at < cutoff_time)
+        )
+        result = await db.execute(count_query)
+        count = result.scalar() or 0
+
+        if count > 0:
+            # Execute batch delete
+            delete_query = delete(PriceCache).where(PriceCache.fetched_at < cutoff_time)
+            await db.execute(delete_query)
+            await db.commit()
+
+        return count

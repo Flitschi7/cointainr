@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  cointainr:
+    image: ghcr.io/flitschi7/cointainr:beta
+    container_name: cointainr
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      # =============================================================================
+      # DATABASE CONFIGURATION
+      # =============================================================================
+      - COINTAINR_DATABASE_URL=sqlite+aiosqlite:///./data/cointainr.db
+
+      # =============================================================================
+      # API KEYS (Required - Replace with your actual keys)
+      # =============================================================================
+      # Get your Finnhub API key from: https://finnhub.io/
+      - FINNHUB_API_KEY=your_finnhub_api_key_here
+
+      # Get your ExchangeRate API key from: https://exchangerate-api.com/
+      - EXCHANGERATE_API_KEY=your_exchangerate_api_key_here
+
+      # =============================================================================
+      # CACHE CONFIGURATION
+      # =============================================================================
+      # How long to cache stock/crypto prices (in minutes)
+      - PRICE_CACHE_TTL_MINUTES=15
+
+      # How long to cache currency conversion rates (in hours)
+      - CONVERSION_CACHE_TTL_HOURS=8
+
+      # How many days to keep old price cache entries before cleanup
+      - PRICE_CACHE_CLEANUP_DAYS=30
+
+      # How many days to keep old conversion cache entries before cleanup
+      - CONVERSION_CACHE_CLEANUP_DAYS=7
+
+      # =============================================================================
+      # APPLICATION SETTINGS
+      # =============================================================================
+      # Default currency for the application (EUR, USD, etc.)
+      - DEFAULT_CURRENCY=EUR
+
+      # If true, only manual "Force Refresh" will fetch new prices
+      # If false, prices will be fetched automatically when cache expires
+      - FORCE_REFRESH_ONLY=false
+
+      # =============================================================================
+      # LOGGING CONFIGURATION
+      # =============================================================================
+      # Log level: DEBUG, INFO, WARNING, ERROR
+      - LOG_LEVEL=INFO
+
+      # Enable JSON formatted logging (useful for production)
+      - ENABLE_JSON_LOGGING=false
+
+      # =============================================================================
+      # SYSTEM CONFIGURATION
+      # =============================================================================
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
