@@ -8,6 +8,8 @@
 	import BrokerPieChart from '$lib/components/BrokerPieChart.svelte';
 	import TopHoldings from '$lib/components/TopHoldings.svelte';
 	import AssetPerformanceChart from '$lib/components/AssetPerformanceChart.svelte';
+	import PortfolioRiskScore from '$lib/components/PortfolioRiskScore.svelte';
+	import PortfolioEfficiency from '$lib/components/PortfolioEfficiency.svelte';
 	import * as enhancedApi from '$lib/services/enhancedApi';
 	import type { Asset } from '$lib/types';
 	import type { RefreshAllResponse, AssetCacheStatus } from '$lib/types';
@@ -40,12 +42,13 @@
 	let cacheStatusMap: Map<number, AssetCacheStatus> = new Map();
 
 	// Tab navigation state - derived from URL parameters
-	let activeTab: 'portfolio' | 'distribution' = 'portfolio';
+	let activeTab: 'portfolio' | 'distribution' | 'analytics' = 'portfolio';
 
 	// Tab definitions
 	const tabs = [
 		{ id: 'portfolio', label: 'Portfolio', icon: '📈' },
-		{ id: 'distribution', label: 'Distribution', icon: '📊' }
+		{ id: 'distribution', label: 'Distribution', icon: '📊' },
+		{ id: 'analytics', label: 'Analytics', icon: '🧠' }
 	] as const;
 
 	// Update activeTab based on URL parameters
@@ -53,12 +56,14 @@
 		const tabParam = $page.url.searchParams.get('tab');
 		if (tabParam === 'distribution') {
 			activeTab = 'distribution';
+		} else if (tabParam === 'analytics') {
+			activeTab = 'analytics';
 		} else {
 			activeTab = 'portfolio';
 		}
 	}
 
-	function setActiveTab(tabId: 'portfolio' | 'distribution') {
+	function setActiveTab(tabId: 'portfolio' | 'distribution' | 'analytics') {
 		// Update URL without page reload
 		const url = new URL($page.url);
 		if (tabId === 'portfolio') {
@@ -1396,6 +1401,34 @@
 						{assetPrices}
 						{refreshTrigger}
 						maxHoldings={10}
+					/>
+				</div>
+			</div>
+		</main>
+
+	{:else if activeTab === 'analytics'}
+		<!-- Analytics Tab Content -->
+		<main class="bg-surface rounded-lg p-4 sm:p-6 shadow-lg">
+			<div class="mb-4">
+				<h2 class="font-headline text-xl sm:text-2xl">Portfolio Analytics</h2>
+			</div>
+			
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+				<!-- Portfolio Efficiency -->
+				<div class="bg-background rounded-lg p-6">
+					<PortfolioEfficiency 
+						assets={sortedAssets} 
+						{assetPrices}
+						{refreshTrigger}
+					/>
+				</div>
+				
+				<!-- Portfolio Risk Score -->
+				<div class="bg-background rounded-lg p-6">
+					<PortfolioRiskScore 
+						assets={sortedAssets} 
+						{assetPrices}
+						{refreshTrigger}
 					/>
 				</div>
 			</div>
