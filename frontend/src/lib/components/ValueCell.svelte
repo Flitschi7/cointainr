@@ -13,7 +13,7 @@
 	export let symbol: string;
 	export let quantity: number;
 	export let currency: string;
-	export let assetType: 'stock' | 'crypto' = 'stock'; // New prop to distinguish asset types
+	export let assetType: 'stock' | 'crypto' | 'derivative' = 'stock'; // New prop to distinguish asset types
 	export let refreshTrigger: number = 0; // Change to numeric trigger instead of boolean
 	export let showCacheStatus: boolean = false; // Whether to show cache status indicator
 

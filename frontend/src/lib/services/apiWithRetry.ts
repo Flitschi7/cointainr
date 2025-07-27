@@ -78,7 +78,7 @@ export const getAssets = createRetryableFunction(
 export const getPrice = createRetryableFunction(
 	async (
 		symbol: string,
-		type: 'crypto' | 'stock',
+		type: 'crypto' | 'stock' | 'derivative',
 		options?: enhancedApi.ApiOptions
 	): Promise<PriceResponse> => {
 		try {
@@ -149,7 +149,7 @@ export const getConversionRate = createRetryableFunction(
 export const batchGetPrices = createRetryableFunction(
 	async (
 		symbols: string[],
-		types: ('crypto' | 'stock')[],
+		types: ('crypto' | 'stock' | 'derivative')[],
 		options?: enhancedApi.ApiOptions
 	): Promise<PriceResponse[]> => {
 		try {

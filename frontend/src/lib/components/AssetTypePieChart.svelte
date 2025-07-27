@@ -17,7 +17,8 @@
 		const distribution = {
 			cash: 0,
 			stock: 0,
-			crypto: 0
+			crypto: 0,
+			derivative: 0
 		};
 
 		assets.forEach(asset => {
@@ -44,7 +45,7 @@
 		if (!chartCanvas) return;
 
 		const distribution = calculateAssetDistribution();
-		const total = distribution.cash + distribution.stock + distribution.crypto;
+		const total = distribution.cash + distribution.stock + distribution.crypto + distribution.derivative;
 
 		// Only show chart if there's data
 		if (total === 0) return;
@@ -69,6 +70,12 @@
 			data.push(distribution.crypto);
 			labels.push(`Crypto`);
 			colors.push('#F59E0B'); // Amber/orange for better visibility than gold
+		}
+
+		if (distribution.derivative > 0) {
+			data.push(distribution.derivative);
+			labels.push(`Derivatives`);
+			colors.push('#8B5CF6'); // Purple for derivatives
 		}
 
 		const config: ChartConfiguration = {

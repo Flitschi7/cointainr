@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Asset } from '$lib/types';
+	import * as enhancedApi from '$lib/services/enhancedApi';
 
 	export let assets: Asset[] = [];
 	export let assetPrices: Map<number, { price: number; currency: string }> = new Map();
@@ -40,7 +41,7 @@
 			};
 		}
 
-		// Calculate total portfolio value
+		// For sync fallback, use simple calculation without currency conversion
 		let totalValue = 0;
 		const assetValues: { asset: Asset; value: number; type: string }[] = [];
 
@@ -58,6 +59,54 @@
 			assetValues.push({ asset, value, type: asset.type });
 		});
 
+		return calculateEfficiencyFromValues(assetValues, totalValue);
+	}
+
+	async function calculateEfficiencyAsync(): Promise<EfficiencyMetrics> {
+		const targetCurrency = 'EUR';
+
+		// Calculate total portfolio value with currency conversion
+		let totalValue = 0;
+		const assetValues: { asset: Asset; value: number; type: string }[] = [];
+
+		for (const asset of assets) {
+			let value = 0;
+			
+			if (asset.type === 'cash') {
+				value = asset.quantity || 0;
+			} else {
+				const priceData = assetPrices.get(asset.id);
+				
+				if (priceData) {
+					let currentValue = (asset.quantity || 0) * priceData.price;
+					const priceCurrency = priceData.currency;
+
+					// Convert to target currency if needed
+					if (priceCurrency !== targetCurrency) {
+						try {
+							const conversionData = await enhancedApi.convertCurrency(
+								priceCurrency,
+								targetCurrency,
+								currentValue,
+								{ forceRefresh: false }
+							);
+							currentValue = conversionData.converted;
+						} catch (error) {
+							console.error(`Failed to convert ${priceCurrency} to ${targetCurrency}:`, error);
+						}
+					}
+
+					value = currentValue;
+				}
+			}
+			totalValue += value;
+			assetValues.push({ asset, value, type: asset.type });
+		}
+
+		return calculateEfficiencyFromValues(assetValues, totalValue);
+	}
+
+	function calculateEfficiencyFromValues(assetValues: { asset: Asset; value: number; type: string }[], totalValue: number): EfficiencyMetrics {
 		if (totalValue === 0) {
 			return {
 				sharpeRatio: 0,
@@ -153,14 +202,16 @@
 			const riskByType: { [key: string]: number } = {
 				'cash': 1,
 				'stock': 15,
-				'crypto': 50
+				'crypto': 50,
+				'derivative': 25  // Derivatives typically have moderate to high risk
 			};
 			
 			// Expected return assumptions (%)
 			const returnByType: { [key: string]: number } = {
 				'cash': 2,
 				'stock': 8,
-				'crypto': 15
+				'crypto': 15,
+				'derivative': 10  // Derivatives can offer good returns but vary widely
 			};
 
 			weightedRisk += weight * (riskByType[type] || 10);
@@ -300,7 +351,12 @@
 
 	// Reactive calculation
 	$: if (assets && assetPrices && (refreshTrigger || refreshTrigger === 0)) {
-		efficiencyData = calculateEfficiency();
+		calculateEfficiencyAsync().then(result => {
+			efficiencyData = result;
+		}).catch(error => {
+			console.error('Error calculating efficiency:', error);
+			efficiencyData = calculateEfficiency(); // Fallback to sync version
+		});
 	}
 </script>
 

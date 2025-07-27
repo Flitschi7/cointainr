@@ -129,6 +129,53 @@ async def get_crypto_price(
         raise HTTPException(status_code=error_code, detail=error_detail)
 
 
+@router.get("/derivative/{isin}")
+async def get_derivative_price(
+    isin: str,
+    force_refresh: bool = Query(
+        False, description="Force refresh from API, bypass cache"
+    ),
+    db: AsyncSession = db_dep,
+):
+    """
+    Get the current price for a derivative by ISIN using Onvista with caching.
+    Returns cached price if available and fresh (within configured cache TTL).
+    Includes cache validity information and expiration details.
+    """
+    try:
+        result = await price_service.get_derivative_price(
+            db=db, isin=isin, force_refresh=force_refresh
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        # Enhanced error handling for cache-related failures
+        error_message = str(e)
+        error_code = 502
+        error_detail = {
+            "message": f"Failed to fetch derivative price: {error_message}",
+            "cache_used": False,
+            "error_type": "api_error" if "API" in error_message else "unknown_error",
+        }
+
+        # Try to fall back to cached data even if expired
+        try:
+            cached_result = await price_service.get_derivative_price(
+                db=db, isin=isin, force_refresh=False, allow_expired=True
+            )
+            if cached_result:
+                error_detail["cache_fallback_available"] = True
+                error_detail["cache_data"] = cached_result
+                error_detail["message"] = "API error, using expired cache data"
+                return cached_result
+        except Exception:
+            # If fallback fails, continue with original error
+            pass
+
+        raise HTTPException(status_code=error_code, detail=error_detail)
+
+
 @router.get("/convert")
 async def convert_currency(
     from_currency: str,
@@ -328,6 +375,29 @@ async def refresh_all_prices(db: AsyncSession = db_dep):
                             "cache_valid_until": result.get("cache_valid_until"),
                         }
                     )
+                elif asset_type == AssetType.DERIVATIVE and asset_symbol:
+                    result = await price_service.get_derivative_price(
+                        db=db, isin=asset_symbol, force_refresh=True
+                    )
+                    results.append(
+                        {
+                            "asset_id": asset_id,
+                            "symbol": asset_symbol,
+                            "type": "derivative",
+                            "price": result["price"],
+                            "currency": result["currency"],
+                            "source": result["source"],
+                            "cache_status": result.get(
+                                "cache_status",
+                                {
+                                    "is_valid": True,
+                                    "age_minutes": 0,
+                                    "ttl_minutes": settings.PRICE_CACHE_MINUTES,
+                                },
+                            ),
+                            "cache_valid_until": result.get("cache_valid_until"),
+                        }
+                    )
             except Exception as e:
                 # Enhanced error handling with cache fallback attempt
                 error_message = str(e)
@@ -361,6 +431,21 @@ async def refresh_all_prices(db: AsyncSession = db_dep):
                         cached_result = await price_service.get_crypto_price(
                             db=db,
                             symbol=asset_symbol,
+                            force_refresh=False,
+                            allow_expired=True,
+                        )
+                        if cached_result:
+                            error_detail["cache_fallback_available"] = True
+                            error_detail["cache_data"] = {
+                                "price": cached_result["price"],
+                                "currency": cached_result["currency"],
+                                "cached_at": cached_result["fetched_at"],
+                                "cache_status": cached_result.get("cache_status"),
+                            }
+                    elif asset_type == AssetType.DERIVATIVE and asset_symbol:
+                        cached_result = await price_service.get_derivative_price(
+                            db=db,
+                            isin=asset_symbol,
                             force_refresh=False,
                             allow_expired=True,
                         )
@@ -446,11 +531,17 @@ async def get_cache_stats(db: AsyncSession = db_dep):
     )
     crypto_count = crypto_result.scalar()
 
+    derivative_result = await db.execute(
+        select(func.count(PriceCache.id)).where(PriceCache.asset_type == "derivative")
+    )
+    derivative_count = derivative_result.scalar()
+
     return {
         "total_entries": total_count,
         "fresh_entries": fresh_count,
         "stock_entries": stock_count,
         "crypto_entries": crypto_count,
+        "derivative_entries": derivative_count,
         "cache_age_minutes": settings.PRICE_CACHE_MINUTES,
     }
 
@@ -503,7 +594,10 @@ async def get_asset_cache_status(db: AsyncSession = db_dep):
         asset_symbol = asset.symbol
         asset_type = asset.type
 
-        if asset_type in [AssetType.STOCK, AssetType.CRYPTO] and asset_symbol:
+        if (
+            asset_type in [AssetType.STOCK, AssetType.CRYPTO, AssetType.DERIVATIVE]
+            and asset_symbol
+        ):
             # Check if we have cached data for this asset
             cache_entry = await crud_price_cache.get_cache_by_symbol(
                 db=db, symbol=asset_symbol, asset_type=asset_type.value

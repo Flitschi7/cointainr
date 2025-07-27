@@ -118,15 +118,36 @@ export async function getCryptoPrice(symbol: string, options?: ApiOptions): Prom
 }
 
 /**
+ * Get derivative price with cache-first approach using Onvista
+ */
+export async function getDerivativePrice(
+	isin: string,
+	options?: ApiOptions
+): Promise<PriceResponse> {
+	const cacheKey = `derivative_price_${isin}`;
+	const ttl = options?.ttl || PRICE_CACHE_TTL; // Use same TTL as stocks
+	const deduplicationKey = `${cacheKey}_${options?.forceRefresh || false}`;
+
+	return withDeduplication(deduplicationKey, () =>
+		cacheService.getOrFetch(cacheKey, () => api.getDerivativePrice(isin, options?.forceRefresh), {
+			ttl,
+			forceRefresh: options?.forceRefresh
+		})
+	);
+}
+
+/**
  * Get price for any asset type with cache-first approach
  */
 export async function getPrice(
 	symbol: string,
-	type: 'crypto' | 'stock',
+	type: 'crypto' | 'stock' | 'derivative',
 	options?: ApiOptions
 ): Promise<PriceResponse> {
 	if (type === 'crypto') {
 		return getCryptoPrice(symbol, options);
+	} else if (type === 'derivative') {
+		return getDerivativePrice(symbol, options);
 	} else {
 		return getStockPrice(symbol, options);
 	}
@@ -313,7 +334,7 @@ export async function getAssetCacheStatus(): Promise<AssetCacheStatus[]> {
  */
 export async function batchGetPrices(
 	symbols: string[],
-	types: ('crypto' | 'stock')[],
+	types: ('crypto' | 'stock' | 'derivative')[],
 	options?: ApiOptions
 ): Promise<PriceResponse[]> {
 	if (symbols.length !== types.length) {
@@ -321,7 +342,11 @@ export async function batchGetPrices(
 	}
 
 	// Create a map to track which symbols need fresh data
-	const needsFreshData: { symbol: string; type: 'crypto' | 'stock'; index: number }[] = [];
+	const needsFreshData: {
+		symbol: string;
+		type: 'crypto' | 'stock' | 'derivative';
+		index: number;
+	}[] = [];
 	const results: (PriceResponse | null)[] = new Array(symbols.length).fill(null);
 
 	// Check cache for each symbol
@@ -348,10 +373,13 @@ export async function batchGetPrices(
 			// Group symbols by type to optimize API calls
 			const cryptoSymbols: { symbol: string; index: number }[] = [];
 			const stockSymbols: { symbol: string; index: number }[] = [];
+			const derivativeSymbols: { symbol: string; index: number }[] = [];
 
 			needsFreshData.forEach((item) => {
 				if (item.type === 'crypto') {
 					cryptoSymbols.push({ symbol: item.symbol, index: item.index });
+				} else if (item.type === 'derivative') {
+					derivativeSymbols.push({ symbol: item.symbol, index: item.index });
 				} else {
 					stockSymbols.push({ symbol: item.symbol, index: item.index });
 				}
@@ -364,6 +392,12 @@ export async function batchGetPrices(
 			for (let i = 0; i < cryptoSymbols.length; i += batchSize) {
 				const batch = cryptoSymbols.slice(i, i + batchSize);
 				await processBatch(batch, 'crypto', results);
+			}
+
+			// Process derivative symbols
+			for (let i = 0; i < derivativeSymbols.length; i += batchSize) {
+				const batch = derivativeSymbols.slice(i, i + batchSize);
+				await processBatch(batch, 'derivative', results);
 			}
 
 			// Process stock symbols
@@ -384,18 +418,24 @@ export async function batchGetPrices(
 /**
  * Process a batch of symbols of the same type
  * @param batch Array of symbols and their indices
- * @param type Asset type (crypto or stock)
+ * @param type Asset type (crypto, stock, or derivative)
  * @param results Results array to populate
  */
 async function processBatch(
 	batch: { symbol: string; index: number }[],
-	type: 'crypto' | 'stock',
+	type: 'crypto' | 'stock' | 'derivative',
 	results: (PriceResponse | null)[]
 ): Promise<void> {
 	try {
 		// Create promises for each symbol in the batch
 		const promises = batch.map(({ symbol }) => {
-			return type === 'crypto' ? api.getCryptoPrice(symbol, true) : api.getStockPrice(symbol, true);
+			if (type === 'crypto') {
+				return api.getCryptoPrice(symbol, true);
+			} else if (type === 'derivative') {
+				return api.getDerivativePrice(symbol, true);
+			} else {
+				return api.getStockPrice(symbol, true);
+			}
 		});
 
 		// Use Promise.allSettled to handle individual failures
@@ -435,7 +475,7 @@ async function processBatch(
  */
 function handleSymbolError(
 	symbol: string,
-	type: 'crypto' | 'stock',
+	type: 'crypto' | 'stock' | 'derivative',
 	index: number,
 	results: (PriceResponse | null)[]
 ): void {
@@ -472,7 +512,7 @@ function handleSymbolError(
  */
 function handleBatchError(
 	symbols: string[],
-	types: ('crypto' | 'stock')[],
+	types: ('crypto' | 'stock' | 'derivative')[],
 	results: (PriceResponse | null)[]
 ): void {
 	// For any remaining null results, try to use cached data
@@ -488,7 +528,7 @@ function handleBatchError(
 /**
  * Get cache status information for a specific asset
  */
-export function getAssetCacheInfo(symbol: string, type: 'crypto' | 'stock') {
+export function getAssetCacheInfo(symbol: string, type: 'crypto' | 'stock' | 'derivative') {
 	const cacheKey = `${type}_price_${symbol}`;
 
 	return {

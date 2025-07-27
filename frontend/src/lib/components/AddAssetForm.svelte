@@ -97,6 +97,7 @@
 				<option value="cash">Cash</option>
 				<option value="stock">Stock</option>
 				<option value="crypto">Crypto</option>
+				<option value="derivative">Derivative</option>
 			</select>
 		</div>
 		<div>
@@ -119,7 +120,7 @@
 					bind:value={formData.symbol}
 					required
 					class="bg-background text-text-light w-full rounded p-2"
-					placeholder="e.g., AAPL, BTC"
+					placeholder={formData.type === 'derivative' ? 'e.g., DE000HT3NZR7' : 'e.g., AAPL, BTC'}
 				/>
 			</div>
 		{/if}

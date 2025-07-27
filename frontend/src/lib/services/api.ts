@@ -170,6 +170,25 @@ export async function getCryptoPrice(
 }
 
 /**
+ * Get derivative price with caching support using Onvista.
+ */
+export async function getDerivativePrice(
+	isin: string,
+	forceRefresh: boolean = false
+): Promise<PriceResponse> {
+	const url = createApiUrl(
+		`/price/derivative/${isin}`,
+		forceRefresh ? { force_refresh: 'true' } : undefined
+	);
+
+	const response = await fetch(url);
+	if (!response.ok) {
+		throw new Error('Failed to fetch derivative price');
+	}
+	return await response.json();
+}
+
+/**
  * Convert currency amount with caching support.
  */
 export async function convertCurrency(

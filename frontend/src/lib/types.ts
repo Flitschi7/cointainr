@@ -1,7 +1,7 @@
 /**
  * Enum for supported asset types.
  */
-export type AssetType = 'cash' | 'stock' | 'crypto';
+export type AssetType = 'cash' | 'stock' | 'crypto' | 'derivative';
 
 /**
  * Asset interface representing a financial asset.

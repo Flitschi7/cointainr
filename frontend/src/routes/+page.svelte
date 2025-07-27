@@ -145,7 +145,7 @@
 
 	let filterLocation = '';
 	let filterSymbol = '';
-	let filterType: 'all' | 'cash' | 'stock' | 'crypto' = 'all';
+	let filterType: 'all' | 'cash' | 'stock' | 'crypto' | 'derivative' = 'all';
 
 	// Sorting state
 	type SortField =
@@ -630,8 +630,8 @@
 					continue;
 				}
 
-				// Handle stock and crypto assets
-				if (asset.type === 'stock' || asset.type === 'crypto') {
+				// Handle stock, crypto, and derivative assets
+				if (asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative') {
 					const currentPrice = getCurrentPrice(asset);
 					const quantity = asset.quantity || 0;
 					let currentValue = currentPrice * quantity;
@@ -961,6 +961,7 @@
 					<option value="cash">Cash</option>
 					<option value="stock">Stock</option>
 					<option value="crypto">Crypto</option>
+					<option value="derivative">Derivative</option>
 				</select>
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:border-l sm:border-gray-600 sm:pl-4">
 					<label for="totalCurrency" class="text-text-light text-sm">Totals in:</label>
@@ -1216,7 +1217,7 @@
 								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										-
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
+									{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
 										<ValueCell
 											symbol={asset.symbol ?? ''}
 											quantity={1}
@@ -1234,7 +1235,7 @@
 								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										{formatCurrency(asset.quantity, asset.currency ?? 'EUR')}
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
+									{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
 										<ValueCell
 											symbol={asset.symbol ?? ''}
 											quantity={asset.quantity}
@@ -1252,7 +1253,7 @@
 								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										-
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
+									{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
 										<ProfitLossCell
 											symbol={asset.symbol ?? ''}
 											quantity={asset.quantity}
@@ -1272,7 +1273,7 @@
 								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
 									{#if asset.type === 'cash'}
 										-
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
+									{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
 										<ProfitLossCell
 											symbol={asset.symbol ?? ''}
 											quantity={asset.quantity}
