@@ -106,3 +106,27 @@ export interface AssetCacheStatus {
 	cache_age_minutes: number | null;
 	needs_refresh: boolean;
 }
+
+/**
+ * Authentication state interface for the auth store.
+ */
+export interface AuthState {
+	isAuthenticated: boolean;
+	isLoading: boolean;
+	error: string | null;
+	username: string;
+	demoMode: boolean;
+	expiresAt: string | null;
+	sessionToken: string | null;
+}
+
+/**
+ * Session data interface for persistence.
+ */
+export interface SessionData {
+	sessionToken: string;
+	username: string;
+	demoMode: boolean;
+	expiresAt: string;
+	lastValidated: string;
+}

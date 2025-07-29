@@ -1,6 +1,7 @@
 import os
 import logging
 from dotenv import load_dotenv
+from .auth_config import auth_settings
 
 load_dotenv()  # Loads variables from .env
 
@@ -52,6 +53,12 @@ class Settings:
         "yes",
     )
 
+    # Authentication settings (imported from auth_config)
+    @property
+    def auth_settings(self):
+        """Access to authentication settings"""
+        return auth_settings
+
     def validate_environment(self) -> bool:
         """
         Validate critical environment variables and configuration.
@@ -96,6 +103,12 @@ class Settings:
                 f"DEFAULT_CURRENCY should be a 3-letter currency code. Got: {self.DEFAULT_CURRENCY}. Using USD"
             )
             self.DEFAULT_CURRENCY = "USD"
+
+        # Validate authentication settings
+        auth_valid = self.auth_settings.validate_configuration()
+        if not auth_valid:
+            logger.warning("Authentication configuration validation failed")
+            valid = False
 
         return valid
 

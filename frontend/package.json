@@ -13,8 +13,12 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"format": "prettier --write .",
 		"lint": "prettier --check . && eslint .",
+		"test:unit": "vitest run",
+		"test:unit:watch": "vitest",
+		"test:unit:coverage": "vitest run --coverage",
 		"test:e2e": "playwright test",
-		"test": "npm run test:e2e"
+		"test:e2e:headed": "playwright test --headed",
+		"test": "npm run test:unit && npm run test:e2e"
 	},
 	"devDependencies": {
 		"@eslint/compat": "^1.2.5",
@@ -27,6 +31,8 @@
 		"@tailwindcss/postcss": "^4.1.11",
 		"@tailwindcss/typography": "^0.5.15",
 		"@tailwindcss/vite": "^4.0.0",
+		"@testing-library/jest-dom": "^6.6.4",
+		"@testing-library/svelte": "^5.2.8",
 		"@types/lodash-es": "^4.17.12",
 		"@types/node": "^24.1.0",
 		"@vitest/ui": "^3.2.4",
@@ -35,6 +41,7 @@
 		"eslint-config-prettier": "^10.0.1",
 		"eslint-plugin-svelte": "^3.0.0",
 		"globals": "^16.0.0",
+		"jsdom": "^26.1.0",
 		"prettier": "^3.4.2",
 		"prettier-plugin-svelte": "^3.3.3",
 		"prettier-plugin-tailwindcss": "^0.6.11",

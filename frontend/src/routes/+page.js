@@ -10,15 +10,15 @@ import { getMultipleAssetPrices } from '$lib/utils/cacheOperations';
 import { devLog } from '$lib/utils/logger';
 
 /** @type {import('./$types').PageLoad} */
-export async function load() {
+export async function load({ fetch }) {
 	try {
 		// Load assets, cache status, and cache statistics in parallel
 		// Note: We're not forcing refresh here, so we'll use cached data if valid
 		const [assets, cacheStatusData, cacheStats, conversionStats] = await Promise.all([
-			getAssets(),
-			getAssetCacheStatus(),
-			getCacheStats(),
-			getConversionCacheStats()
+			getAssets(fetch),
+			getAssetCacheStatus(fetch),
+			getCacheStats(fetch),
+			getConversionCacheStats(fetch)
 		]);
 
 		// Process cache status to add validity information

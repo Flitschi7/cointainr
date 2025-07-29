@@ -27,7 +27,7 @@ function getApiBaseUrl(): string {
 	}
 
 	// In development, use environment variable or default dev server
-	return import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api/v1';
+	return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 }
 
 const API_BASE_URL = getApiBaseUrl();
@@ -74,8 +74,11 @@ if (import.meta.env.DEV) {
 /**
  * Fetch all assets from the backend API.
  */
-export async function getAssets(): Promise<Asset[]> {
-	const response = await fetch(`${API_BASE_URL}/assets/`);
+export async function getAssets(customFetch?: typeof fetch): Promise<Asset[]> {
+	const fetchFn = customFetch || fetch;
+	const response = await fetchFn(`${API_BASE_URL}/assets/`, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch assets');
 	}
@@ -91,7 +94,8 @@ export async function createAsset(assetData: Omit<Asset, 'id'>): Promise<Asset> 
 		headers: {
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify(assetData)
+		body: JSON.stringify(assetData),
+		credentials: 'include'
 	});
 	if (!response.ok) {
 		throw new Error('Failed to create asset');
@@ -104,7 +108,8 @@ export async function createAsset(assetData: Omit<Asset, 'id'>): Promise<Asset> 
  */
 export async function deleteAsset(assetId: number): Promise<void> {
 	const response = await fetch(`${API_BASE_URL}/assets/${assetId}`, {
-		method: 'DELETE'
+		method: 'DELETE',
+		credentials: 'include'
 	});
 	if (!response.ok) {
 		throw new Error('Failed to delete asset');
@@ -123,7 +128,8 @@ export async function updateAsset(
 		headers: {
 			'Content-Type': 'application/json'
 		},
-		body: JSON.stringify(assetData)
+		body: JSON.stringify(assetData),
+		credentials: 'include'
 	});
 	if (!response.ok) {
 		throw new Error('Failed to update asset');
@@ -143,7 +149,9 @@ export async function getStockPrice(
 		forceRefresh ? { force_refresh: 'true' } : undefined
 	);
 
-	const response = await fetch(url);
+	const response = await fetch(url, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch stock price');
 	}
@@ -162,7 +170,9 @@ export async function getCryptoPrice(
 		forceRefresh ? { force_refresh: 'true' } : undefined
 	);
 
-	const response = await fetch(url);
+	const response = await fetch(url, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch crypto price');
 	}
@@ -181,7 +191,9 @@ export async function getDerivativePrice(
 		forceRefresh ? { force_refresh: 'true' } : undefined
 	);
 
-	const response = await fetch(url);
+	const response = await fetch(url, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch derivative price');
 	}
@@ -204,7 +216,9 @@ export async function convertCurrency(
 		...(forceRefresh && { force_refresh: 'true' })
 	});
 
-	const response = await fetch(url);
+	const response = await fetch(url, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to convert currency');
 	}
@@ -224,7 +238,9 @@ export async function getConversionRate(
 		forceRefresh ? { force_refresh: 'true' } : undefined
 	);
 
-	const response = await fetch(url);
+	const response = await fetch(url, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch conversion rate');
 	}
@@ -236,7 +252,8 @@ export async function getConversionRate(
  */
 export async function refreshAllPrices(): Promise<RefreshAllResponse> {
 	const response = await fetch(`${API_BASE_URL}/price/refresh-all`, {
-		method: 'POST'
+		method: 'POST',
+		credentials: 'include'
 	});
 	if (!response.ok) {
 		throw new Error('Failed to refresh all prices');
@@ -249,7 +266,8 @@ export async function refreshAllPrices(): Promise<RefreshAllResponse> {
  */
 export async function clearPriceCache(): Promise<{ message: string }> {
 	const response = await fetch(`${API_BASE_URL}/price/cache`, {
-		method: 'DELETE'
+		method: 'DELETE',
+		credentials: 'include'
 	});
 	if (!response.ok) {
 		throw new Error('Failed to clear price cache');
@@ -260,8 +278,11 @@ export async function clearPriceCache(): Promise<{ message: string }> {
 /**
  * Get price cache statistics.
  */
-export async function getCacheStats(): Promise<CacheStats> {
-	const response = await fetch(`${API_BASE_URL}/price/cache/stats`);
+export async function getCacheStats(customFetch?: typeof fetch): Promise<CacheStats> {
+	const fetchFn = customFetch || fetch;
+	const response = await fetchFn(`${API_BASE_URL}/price/cache/stats`, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch cache stats');
 	}
@@ -273,7 +294,8 @@ export async function getCacheStats(): Promise<CacheStats> {
  */
 export async function clearConversionCache(): Promise<{ message: string }> {
 	const response = await fetch(`${API_BASE_URL}/price/cache/conversions`, {
-		method: 'DELETE'
+		method: 'DELETE',
+		credentials: 'include'
 	});
 	if (!response.ok) {
 		throw new Error('Failed to clear conversion cache');
@@ -284,12 +306,15 @@ export async function clearConversionCache(): Promise<{ message: string }> {
 /**
  * Get conversion cache statistics.
  */
-export async function getConversionCacheStats(): Promise<{
+export async function getConversionCacheStats(customFetch?: typeof fetch): Promise<{
 	total_entries: number;
 	fresh_entries: number;
 	cache_age_hours: number;
 }> {
-	const response = await fetch(`${API_BASE_URL}/price/cache/conversions/stats`);
+	const fetchFn = customFetch || fetch;
+	const response = await fetchFn(`${API_BASE_URL}/price/cache/conversions/stats`, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch conversion cache stats');
 	}
@@ -299,8 +324,11 @@ export async function getConversionCacheStats(): Promise<{
 /**
  * Get cache status for all assets.
  */
-export async function getAssetCacheStatus(): Promise<AssetCacheStatus[]> {
-	const response = await fetch(`${API_BASE_URL}/price/cache/asset-status`);
+export async function getAssetCacheStatus(customFetch?: typeof fetch): Promise<AssetCacheStatus[]> {
+	const fetchFn = customFetch || fetch;
+	const response = await fetchFn(`${API_BASE_URL}/price/cache/asset-status`, {
+		credentials: 'include'
+	});
 	if (!response.ok) {
 		throw new Error('Failed to fetch asset cache status');
 	}

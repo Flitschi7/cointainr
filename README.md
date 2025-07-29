@@ -86,6 +86,15 @@ Cointainr is a self-hosted financial portfolio tracker that puts you in complete
 | `FORCE_REFRESH_ONLY`         | `false` | Only fetch prices on manual refresh                         |
 | `LOG_LEVEL`                  | `INFO`  | Logging level (DEBUG, INFO, WARNING, ERROR)                 |
 
+### Authentication Configuration (Optional)
+
+| Variable                | Default | Description                                         |
+| ----------------------- | ------- | --------------------------------------------------- |
+| `AUTH_USER`             | -       | Username for authentication (enables auth when set) |
+| `AUTH_PASSWORD`         | -       | Password for authentication (enables auth when set) |
+| `SESSION_SECRET_KEY`    | auto    | Secret key for session encryption                   |
+| `SESSION_TIMEOUT_HOURS` | `24`    | Session timeout in hours                            |
+
 ### Cache Configuration
 
 Cointainr uses intelligent caching to respect API rate limits:
@@ -124,6 +133,78 @@ Cointainr uses intelligent caching to respect API rate limits:
 - **Asset Breakdown**: Detailed view of all holdings
 - **Profit/Loss**: Automatic calculation if purchase prices provided
 - **Price Updates**: Smart caching with manual refresh option
+
+---
+
+## 🔐 Authentication (Optional)
+
+Cointainr supports optional authentication that can be enabled through environment variables. This is perfect for securing your instance when exposed to the internet or shared with others.
+
+### Basic Authentication
+
+Enable authentication by setting both `AUTH_USER` and `AUTH_PASSWORD`:
+
+```yaml
+environment:
+  - AUTH_USER=admin
+  - AUTH_PASSWORD=your_secure_password_here
+```
+
+When authentication is enabled:
+
+- Users must log in before accessing the application
+- Sessions persist until browser closure
+- All existing functionality remains unchanged after login
+
+### Demo Mode
+
+Demo mode provides a quick way to showcase Cointainr with sample data:
+
+```yaml
+environment:
+  - DEMO_MODE=true
+```
+
+Demo mode features:
+
+- **Automatic Credentials**: Login with `demo` / `demo1` (displayed on login screen)
+- **Daily Cleanup**: Database resets daily at midnight (preserves essential data)
+- **Sample Data**: Perfect for demonstrations and testing
+- **Visual Indicators**: Clear demo mode indicators throughout the interface
+
+**Demo Mode Use Cases:**
+
+- **Public Demos**: Safely showcase Cointainr without exposing real data
+- **Testing**: Test features with automatic data reset
+- **Onboarding**: Let new users explore without setup complexity
+
+**Important Notes:**
+
+- Demo mode automatically enables authentication
+- Asset with ID 1 is preserved during cleanup (maintains app functionality)
+- Cleanup occurs once per day, not on every restart
+- All user-added data is cleared during cleanup
+
+### Session Configuration
+
+Customize session behavior (optional):
+
+```yaml
+environment:
+  - SESSION_SECRET_KEY=your_random_secret_key_here # Auto-generated if not set
+  - SESSION_TIMEOUT_HOURS=24 # Session duration
+```
+
+### Migration from Unauthenticated Setup
+
+Existing users can enable authentication without data loss:
+
+1. **Add environment variables** to your `docker-compose.yml`
+2. **Restart the container**: `docker-compose restart`
+3. **Access the login page** at your usual URL
+4. **All existing data remains intact**
+
+To disable authentication, simply remove the `AUTH_USER` and `AUTH_PASSWORD` variables and restart.
 
 ---
 
