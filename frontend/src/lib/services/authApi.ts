@@ -42,6 +42,13 @@ export interface LogoutResponse {
 	message: string;
 }
 
+export interface AuthConfigResponse {
+	auth_enabled: boolean;
+	demo_mode: boolean;
+	session_timeout_hours: number;
+	environment: string;
+}
+
 /**
  * Authentication API service for handling login, logout, and session management
  */
@@ -140,6 +147,47 @@ export class AuthApiService {
 				username: '',
 				demo_mode: false,
 				expires_at: ''
+			};
+		}
+	}
+
+	/**
+	 * Get authentication configuration
+	 */
+	async getAuthConfig(customFetch?: typeof fetch): Promise<AuthConfigResponse> {
+		try {
+			const fetchFn = customFetch || fetch;
+			const response = await fetchFn(`${API_BASE_URL}/auth/config`, {
+				method: 'GET',
+				credentials: 'include'
+			});
+
+			if (!response.ok) {
+				// If config check fails, assume auth is disabled
+				return {
+					auth_enabled: false,
+					demo_mode: false,
+					session_timeout_hours: 24,
+					environment: 'production'
+				};
+			}
+
+			const data = await response.json();
+			devLog.info('Auth config retrieved', {
+				auth_enabled: data.auth_enabled,
+				demo_mode: data.demo_mode
+			});
+			return data;
+		} catch (error) {
+			devLog.error('Auth config check failed', {
+				error: error instanceof Error ? error.message : String(error)
+			});
+			// Return disabled state on error
+			return {
+				auth_enabled: false,
+				demo_mode: false,
+				session_timeout_hours: 24,
+				environment: 'production'
 			};
 		}
 	}

@@ -103,7 +103,9 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                     "timestamp": datetime.utcnow().isoformat(),
                 },
             )
-            return self._create_unauthorized_response("Authentication required")
+            return self._create_unauthorized_response(
+                "Authentication required", request
+            )
 
         # Validate session token
         try:
@@ -129,7 +131,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                         },
                     )
                     return self._create_unauthorized_response(
-                        "Invalid or expired session"
+                        "Invalid or expired session", request
                     )
 
                 # Add session info to request state for use in route handlers
@@ -170,7 +172,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                         },
                     )
                     return self._create_unauthorized_response(
-                        "Session validation failed"
+                        "Session validation failed", request
                     )
 
         except Exception as e:
@@ -186,7 +188,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                     "timestamp": datetime.utcnow().isoformat(),
                 },
             )
-            return self._create_unauthorized_response("Authentication error")
+            return self._create_unauthorized_response("Authentication error", request)
 
         # Session is valid, proceed with the request
         return await call_next(request)
@@ -279,23 +281,82 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         return "unknown"
 
-    def _create_unauthorized_response(self, message: str) -> JSONResponse:
+    def _create_unauthorized_response(
+        self, message: str, request: Request = None
+    ) -> Response:
         """
         Create a standardized unauthorized response.
 
+        For API requests, returns JSON.
+        For browser requests, serves the frontend (index.html) which will handle the login.
+
         Args:
             message: The error message to include
+            request: The incoming request (used to determine response type)
 
         Returns:
-            JSONResponse: The unauthorized response
+            Response: The unauthorized response (JSON for API, HTML for browser)
         """
-        return JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={
-                "success": False,
-                "error": "Unauthorized",
-                "message": message,
-                "error_code": "AUTH_REQUIRED",
-            },
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        # Check if this is an API request
+        if request and (
+            request.url.path.startswith("/api/")
+            or request.headers.get("Accept", "").startswith("application/json")
+            or request.headers.get("Content-Type", "").startswith("application/json")
+        ):
+            # Return JSON response for API requests
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "success": False,
+                    "error": "Unauthorized",
+                    "message": message,
+                    "error_code": "AUTH_REQUIRED",
+                },
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # For browser requests, serve the frontend index.html
+        # The frontend will detect the lack of authentication and show the login page
+        try:
+            import pathlib
+            from fastapi.responses import FileResponse
+
+            # Try to find the index.html file
+            possible_static_dirs = [
+                pathlib.Path("/app/static"),  # Docker container path
+                pathlib.Path(__file__).parent.parent.parent.parent
+                / "frontend"
+                / "build",  # Local dev path
+            ]
+
+            for static_dir in possible_static_dirs:
+                index_path = static_dir / "index.html"
+                if index_path.exists():
+                    return FileResponse(str(index_path))
+
+            # Fallback to JSON if index.html not found
+            logger.error("index.html not found, falling back to JSON response")
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "success": False,
+                    "error": "Unauthorized",
+                    "message": message,
+                    "error_code": "AUTH_REQUIRED",
+                },
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        except Exception as e:
+            logger.error(f"Error serving frontend for unauthorized request: {e}")
+            # Fallback to JSON response
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "success": False,
+                    "error": "Unauthorized",
+                    "message": message,
+                    "error_code": "AUTH_REQUIRED",
+                },
+                headers={"WWW-Authenticate": "Bearer"},
+            )
