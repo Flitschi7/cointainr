@@ -136,14 +136,14 @@ export const authActions = {
 
 			if (response.success) {
 				const sessionData: SessionData = {
-					sessionToken: response.session_token,
+					sessionToken: '', // Don't store token - backend uses HTTP-only cookie
 					username: response.username,
 					demoMode: response.demo_mode,
 					expiresAt: response.expires_at,
 					lastValidated: new Date().toISOString()
 				};
 
-				// Save session to storage
+				// Save session to storage (without token for security)
 				sessionManager.saveSession(sessionData);
 
 				// Update store state
@@ -154,7 +154,7 @@ export const authActions = {
 					username: response.username,
 					demoMode: response.demo_mode,
 					expiresAt: response.expires_at,
-					sessionToken: response.session_token
+					sessionToken: '' // Don't store token - backend uses HTTP-only cookie
 				});
 
 				// Start session validation timer
@@ -212,23 +212,17 @@ export const authActions = {
 			const response = await authApiService.checkAuthStatus();
 
 			if (response.authenticated) {
-				// Update session data if authenticated
+				// Update session data for UI purposes (no token stored)
 				const sessionData: SessionData = {
-					sessionToken: '', // Server doesn't return token in status check
+					sessionToken: '', // Never store token - backend uses HTTP-only cookie
 					username: response.username,
 					demoMode: response.demo_mode,
 					expiresAt: response.expires_at,
 					lastValidated: new Date().toISOString()
 				};
 
-				// Update stored session if it exists
-				const existingSession = sessionManager.loadSession();
-				if (existingSession) {
-					sessionManager.saveSession({
-						...sessionData,
-						sessionToken: existingSession.sessionToken
-					});
-				}
+				// Save session data (for UI state, not authentication)
+				sessionManager.saveSession(sessionData);
 
 				// Update store state
 				authStore.update((state) => ({
@@ -237,6 +231,7 @@ export const authActions = {
 					username: response.username,
 					demoMode: response.demo_mode,
 					expiresAt: response.expires_at,
+					sessionToken: '', // Don't store token in memory
 					error: null
 				}));
 
@@ -270,24 +265,17 @@ export const authActions = {
 		authStore.update((state) => ({ ...state, isLoading: true }));
 
 		try {
-			// Try to load session from storage
-			const sessionData = sessionManager.loadSession();
+			// Always check with server using HTTP-only cookie
+			// Don't rely on sessionStorage since backend uses HTTP-only cookies
+			const isValid = await this.checkAuthStatus();
 
-			if (sessionData) {
-				// Validate session with server
-				const isValid = await this.checkAuthStatus();
-
-				if (isValid) {
-					// Session is valid, start validation timer
-					startSessionValidation();
-					devLog.info('Authentication initialized from stored session');
-				} else {
-					// Session invalid, clear it
-					sessionManager.clearSession();
-					authStore.set(initialAuthState);
-				}
+			if (isValid) {
+				// Session is valid, start validation timer
+				startSessionValidation();
+				devLog.info('Authentication initialized from HTTP-only cookie');
 			} else {
-				// No stored session
+				// No valid session, clear any stored data
+				sessionManager.clearSession();
 				authStore.set(initialAuthState);
 			}
 		} catch (error) {

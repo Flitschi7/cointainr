@@ -833,6 +833,8 @@
 				await reloadCacheStatus();
 				// Also update frontend cache stats
 				await enhancedApi.getFrontendCacheStats();
+				// Force update the asset prices display by triggering reactivity
+				assetPrices = new Map(assetPrices);
 			}, 1500);
 
 			isDev && log('Manual price refresh completed successfully:', refreshResult);
@@ -927,7 +929,7 @@
 						<div class="flex space-x-1">
 							{#each tabs as tab}
 								<button
-									class="flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 {activeTab ===
+									class="flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 {activeTab ===
 									tab.id
 										? 'bg-background text-text-light border border-gray-600'
 										: 'hover:text-text-light hover:bg-background/50 text-gray-400'}"
@@ -956,43 +958,40 @@
 				<input
 					type="text"
 					bind:value={filterLocation}
-					placeholder="Location/Broker..."
-					class="bg-background text-text-light w-full rounded p-2 sm:w-auto"
+					placeholder="Filter by location or broker..."
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-1 sm:w-auto"
 				/>
 				<input
 					type="text"
 					bind:value={filterSymbol}
-					placeholder="Symbol/ISIN..."
-					class="bg-background text-text-light w-full rounded p-2 sm:w-auto"
+					placeholder="Filter by symbol or ISIN..."
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-1 sm:w-auto"
 				/>
 				<select
 					bind:value={filterType}
-					class="bg-background text-text-light w-full rounded p-2 sm:w-auto"
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-1 sm:w-auto"
 				>
-					<option value="all">All Types</option>
+					<option value="all">All asset types</option>
 					<option value="cash">Cash</option>
-					<option value="stock">Stock</option>
-					<option value="crypto">Crypto</option>
-					<option value="derivative">Derivative</option>
+					<option value="stock">Stocks</option>
+					<option value="crypto">Cryptocurrency</option>
+					<option value="derivative">Derivatives</option>
 				</select>
-				<div
-					class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:border-l sm:border-gray-600 sm:pl-4"
-				>
-					<label for="totalCurrency" class="text-text-light text-sm">Totals in:</label>
-					<div class="flex items-center gap-2">
-						<select
-							id="totalCurrency"
-							bind:value={totalCurrency}
-							class="bg-background text-text-light rounded border border-gray-600 px-3 py-1"
-						>
-							<option value="EUR">EUR</option>
-							<option value="USD">USD</option>
-							<option value="GBP">GBP</option>
-							<option value="CHF">CHF</option>
-						</select>
-						<!-- Compact Currency Rate Display -->
-						<CurrencyRateDisplay baseCurrency={totalCurrency} assets={allAssets} />
-					</div>
+				<div class="flex items-center gap-3 border-l border-gray-600 pl-4">
+					<label for="totalCurrency" class="text-text-light whitespace-nowrap text-sm font-medium">
+						Display currency:
+					</label>
+					<select
+						id="totalCurrency"
+						bind:value={totalCurrency}
+						class="bg-surface text-text-light focus:border-primary focus:ring-primary rounded-lg border border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-1"
+					>
+						<option value="EUR">EUR (€)</option>
+						<option value="USD">USD ($)</option>
+						<option value="GBP">GBP (£)</option>
+						<option value="CHF">CHF</option>
+					</select>
+					<CurrencyRateDisplay baseCurrency={totalCurrency} assets={allAssets} />
 				</div>
 			</div>
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -1000,17 +999,16 @@
 				<button
 					on:click={handleRefreshAllPrices}
 					disabled={isRefreshing}
-					class="bg-primary border-primary flex w-full items-center justify-center gap-2 rounded border p-2 font-bold text-white hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+					class="bg-primary focus:ring-primary flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-opacity-90 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
 					title="Force refresh all prices (bypass cache)"
 					aria-label="Force refresh all prices"
 				>
 					<svg
-						class="h-5 w-5"
+						class="h-4 w-4"
 						class:animate-spin={isRefreshing}
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
-						xmlns="http://www.w3.org/2000/svg"
 					>
 						<path
 							stroke-linecap="round"
@@ -1019,12 +1017,16 @@
 							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
 						></path>
 					</svg>
-					<span class="text-sm">Force Refresh</span>
+					<span>Force Refresh</span>
 				</button>
 				<button
 					on:click={openAddModal}
-					class="bg-gold w-full rounded px-4 py-2 font-bold text-white hover:opacity-80 sm:w-auto"
+					class="bg-gold focus:ring-gold flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-opacity-90 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 sm:w-auto"
 				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"
+						></path>
+					</svg>
 					Add Asset
 				</button>
 			</div>
@@ -1194,7 +1196,7 @@
 									tabindex="0"
 									on:click={() => openEditModal(asset)}
 									on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openEditModal(asset)}
-									class="hover:bg-surface focus:ring-primary cursor-pointer border-b border-gray-600 transition-colors focus:outline-none focus:ring-2"
+									class="hover:bg-background focus:ring-primary cursor-pointer border-b border-gray-600 transition-all duration-200 hover:shadow-sm focus:outline-none focus:ring-2"
 									aria-label={`Edit asset ${asset.name}`}
 								>
 									<!-- 1. Location/Broker -->

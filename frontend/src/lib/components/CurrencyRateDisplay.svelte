@@ -62,10 +62,18 @@
 			const ratePromises = relevantCurrencies.map(async (currency) => {
 				try {
 					const rateData = await enhancedApi.getConversionRate(currency, baseCurrency);
+
+					// Calculate if data is stale (older than 24 hours)
+					const fetchedAt = rateData.fetched_at ? new Date(rateData.fetched_at) : new Date();
+					const now = new Date();
+					const ageInHours = (now.getTime() - fetchedAt.getTime()) / (1000 * 60 * 60);
+					const isStale = ageInHours > 24;
+
 					return {
 						currency,
 						rate: rateData.rate,
-						cached: rateData.cached || false
+						isStale: isStale,
+						ageInHours: ageInHours
 					};
 				} catch (error) {
 					console.error(`Failed to load rate for ${currency}:`, error);
@@ -81,7 +89,8 @@
 				if (rateInfo) {
 					currencyRates.set(rateInfo.currency, {
 						rate: rateInfo.rate,
-						cached: rateInfo.cached
+						isStale: rateInfo.isStale,
+						ageInHours: rateInfo.ageInHours
 					});
 				}
 			});
@@ -105,10 +114,13 @@
 					const rateData = await enhancedApi.getConversionRate(currency, baseCurrency, {
 						forceRefresh: true
 					});
+
+					// Fresh data is never stale
 					return {
 						currency,
 						rate: rateData.rate,
-						cached: false // Fresh data
+						isStale: false,
+						ageInHours: 0
 					};
 				} catch (error) {
 					console.error(`Failed to refresh rate for ${currency}:`, error);
@@ -124,7 +136,8 @@
 				if (rateInfo) {
 					currencyRates.set(rateInfo.currency, {
 						rate: rateInfo.rate,
-						cached: rateInfo.cached
+						isStale: rateInfo.isStale,
+						ageInHours: rateInfo.ageInHours
 					});
 				}
 			});
@@ -145,145 +158,58 @@
 	}
 </script>
 
-<!-- Always show the component for debugging -->
-<div class="currency-rates-compact">
+<div
+	class="bg-surface text-text-light flex items-center gap-2 rounded-lg border border-gray-600 px-3 py-2 text-sm"
+>
 	{#if relevantCurrencies.length > 0}
-		<div class="rates-list">
+		<div class="flex items-center gap-3">
 			{#each Array.from(currencyRates.entries()) as [currency, rateInfo]}
-				<div class="rate-item">
-					<span class="currency-pair">{currency}→{baseCurrency}</span>
-					<span class="rate-value">{rateInfo.rate.toFixed(4)}</span>
-					<span class="cache-indicator" class:cached={rateInfo.cached}>
-						{rateInfo.cached ? '📦' : '🟢'}
+				<div class="flex items-center gap-1">
+					<span class="font-medium text-gray-400">{currency}→{baseCurrency}:</span>
+					<span class="text-primary font-mono font-semibold">{rateInfo.rate.toFixed(4)}</span>
+					<span
+						class="text-xs"
+						class:text-green-400={!rateInfo.isStale}
+						class:text-red-400={rateInfo.isStale}
+						title={rateInfo.isStale
+							? `Stale exchange rate (${Math.round(rateInfo.ageInHours)}h old)`
+							: `Fresh exchange rate (${Math.round(rateInfo.ageInHours)}h old)`}
+					>
+						●
 					</span>
 				</div>
 			{/each}
 		</div>
 
 		<button
-			class="refresh-btn"
+			class="hover:bg-background flex items-center justify-center rounded border border-gray-600 p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-50"
 			on:click={refreshRates}
 			disabled={isRefreshing}
 			title="Refresh currency rates"
 			aria-label="Refresh currency rates"
 		>
 			<svg
-				class="icon"
-				class:spinning={isRefreshing}
-				viewBox="0 0 16 16"
+				class="h-3 w-3"
+				class:animate-spin={isRefreshing}
 				fill="none"
 				stroke="currentColor"
+				viewBox="0 0 24 24"
 			>
 				<path
 					stroke-linecap="round"
 					stroke-linejoin="round"
 					stroke-width="2"
-					d="M3 3v4h.582m10.356 2A6.001 6.001 0 003.582 7m0 0H7m7 7v-4h-.581m0 0a6.003 6.003 0 01-10.357-2m10.357 2H10"
+					d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
 				/>
 			</svg>
 		</button>
 	{:else}
-		<div class="no-rates">
-			<span class="text-sm text-gray-400">
-				{#if assets.length === 0}
-					Loading...
-				{:else}
-					All assets in {baseCurrency}
-					{#if assets.length > 0}
-						<span class="text-xs opacity-75">
-							({assets.length} asset{assets.length !== 1 ? 's' : ''})
-						</span>
-					{/if}
-				{/if}
-			</span>
-		</div>
+		<span class="text-gray-400">
+			{#if assets.length === 0}
+				Loading rates...
+			{:else}
+				All assets in {baseCurrency}
+			{/if}
+		</span>
 	{/if}
 </div>
-
-<style>
-	.currency-rates-compact {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.5rem;
-		background-color: rgba(255, 255, 255, 0.05);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-		border-radius: 0.25rem;
-		font-size: 0.75rem;
-	}
-
-	.rates-list {
-		display: flex;
-		gap: 0.75rem;
-	}
-
-	.rate-item {
-		display: flex;
-		align-items: center;
-		gap: 0.25rem;
-	}
-
-	.currency-pair {
-		color: #9ca3af;
-		font-weight: 500;
-	}
-
-	.rate-value {
-		font-family: 'JetBrains Mono', monospace;
-		font-weight: 600;
-		color: #10b981;
-	}
-
-	.cache-indicator {
-		font-size: 0.7rem;
-	}
-
-	.cached {
-		opacity: 0.7;
-	}
-
-	.refresh-btn {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 0.25rem;
-		background-color: transparent;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		border-radius: 0.25rem;
-		color: #9ca3af;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-
-	.refresh-btn:hover:not(:disabled) {
-		background-color: rgba(255, 255, 255, 0.1);
-		color: #f3f4f6;
-	}
-
-	.refresh-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.icon {
-		width: 12px;
-		height: 12px;
-	}
-
-	.spinning {
-		animation: spin 1s linear infinite;
-	}
-
-	@keyframes spin {
-		from {
-			transform: rotate(0deg);
-		}
-		to {
-			transform: rotate(360deg);
-		}
-	}
-
-	.no-rates {
-		padding: 0.25rem 0.5rem;
-	}
-</style>

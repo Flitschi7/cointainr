@@ -65,7 +65,10 @@
 		<!-- Header Section -->
 		<div class="login-header">
 			<div class="logo-section">
-				<h1 class="app-title">Cointainr</h1>
+				<div class="logo-title-container">
+					<img src="/logo.png" alt="Cointainr Logo" class="app-logo" />
+					<h1 class="app-title">Cointainr</h1>
+				</div>
 				<p class="app-subtitle">Portfolio Management System</p>
 			</div>
 
@@ -158,12 +161,26 @@
 		margin-bottom: 1.5rem;
 	}
 
+	.logo-title-container {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		margin-bottom: 0.5rem;
+	}
+
+	.app-logo {
+		width: 3rem;
+		height: 3rem;
+		object-fit: contain;
+	}
+
 	.app-title {
 		font-family: var(--font-headline);
 		font-size: 2.5rem;
 		font-weight: 700;
 		color: var(--color-gold);
-		margin: 0 0 0.5rem 0;
+		margin: 0;
 		text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 	}
 
@@ -260,6 +277,11 @@
 
 		.login-header {
 			padding: 1.5rem 1.5rem 1rem 1.5rem;
+		}
+
+		.app-logo {
+			width: 2.5rem;
+			height: 2.5rem;
 		}
 
 		.app-title {
