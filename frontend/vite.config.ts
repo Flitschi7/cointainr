@@ -5,6 +5,10 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 
+	define: {
+		'process.env': process.env
+	},
+
 	// Development server configuration
 	server: {
 		port: 5173,
