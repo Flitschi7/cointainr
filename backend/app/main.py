@@ -139,6 +139,11 @@ def create_app() -> FastAPI:
     # Add authentication middleware conditionally (before performance monitoring)
     from app.core.auth_config import auth_settings
 
+    # Debug logging for auth configuration
+    logger.info(
+        f"Auth configuration check: AUTH_USER={auth_settings.AUTH_USER}, AUTH_PASSWORD={'***' if auth_settings.AUTH_PASSWORD else None}, DEMO_MODE={auth_settings.DEMO_MODE}, auth_enabled={auth_settings.auth_enabled}"
+    )
+
     if auth_settings.auth_enabled:
         app.add_middleware(AuthenticationMiddleware)
         logger.info("Authentication middleware enabled")

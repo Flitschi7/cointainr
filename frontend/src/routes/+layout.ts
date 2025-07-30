@@ -20,7 +20,15 @@ export const load: LayoutLoad = async ({ url, fetch }) => {
 	}
 
 	try {
-		// Check authentication status
+		// First check if authentication is enabled
+		const authConfig = await authApiService.getAuthConfig(fetch);
+
+		if (!authConfig.auth_enabled) {
+			// Authentication is disabled, proceed without any auth checks
+			return {};
+		}
+
+		// Authentication is enabled, check authentication status
 		const authStatus = await authApiService.checkAuthStatus(fetch);
 
 		if (!authStatus.authenticated) {
