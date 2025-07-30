@@ -18,6 +18,14 @@ _A modern, self-hosted portfolio tracking app with a focus on clarity, technolog
 
 Cointainr is a self-hosted financial portfolio tracker that puts you in complete control of your data. Track stocks, cryptocurrencies, and cash holdings across multiple currencies with automatic price updates and intelligent caching. No third-party data sharing, no monthly fees - just your data, on your terms.
 
+### 🌐 Try the Demo
+
+Experience Cointainr in action at **[cointainr.pw](https://cointainr.pw)**
+
+- **Demo Credentials**: `demo` / `demo1`
+- **Live Environment**: Fully functional demo with sample data
+- **Daily Reset**: Data resets daily for a fresh experience
+
 ### ✨ Key Features
 
 - **🔒 Self-Hosted & Private**: Your financial data stays on your infrastructure
