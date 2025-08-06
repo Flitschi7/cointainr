@@ -67,14 +67,38 @@ def setup_frontend(app: FastAPI):
         logger.info("Mounted /_app static files")
 
     # Mount other static files (favicon, robots.txt, etc.)
-    static_files = ["favicon.png", "favicon.svg", "robots.txt", "manifest.json"]
+    static_files = [
+        "favicon.png",
+        "favicon.svg",
+        "favicon.ico",
+        "favicon-96x96.png",
+        "apple-touch-icon.png",
+        "robots.txt",
+        "manifest.json",
+        "site.webmanifest",
+        "web-app-manifest-192x192.png",
+        "web-app-manifest-512x512.png",
+        "logo.png",
+    ]
     for static_file in static_files:
         file_path = static_dir / static_file
         if file_path.exists():
+            # Create a closure to capture the current static_file value
+            def create_static_handler(file_name: str, file_path: pathlib.Path):
+                @app.get(f"/{file_name}")
+                async def serve_static_file():
+                    # Set proper MIME type for web manifest
+                    if file_name == "site.webmanifest":
+                        return FileResponse(
+                            str(file_path),
+                            media_type="application/manifest+json",
+                        )
+                    return FileResponse(str(file_path))
 
-            @app.get(f"/{static_file}")
-            async def serve_static_file(file_name=static_file):
-                return FileResponse(str(static_dir / file_name))
+                return serve_static_file
+
+            create_static_handler(static_file, file_path)
+            logger.info(f"Registered static file route: /{static_file}")
 
     # SPA route handler - serve index.html for all non-API and non-static routes
     @app.get("/{full_path:path}")

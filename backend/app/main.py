@@ -13,14 +13,18 @@ from app.core.config import settings
 from app.core.error_handling import setup_exception_handlers
 from app.core.logging_config import configure_logging
 from app.middleware.error_logging import ErrorLoggingMiddleware
+from app.middleware.auth_middleware import AuthenticationMiddleware
 
 from app.api.endpoints import assets
 from app.api.endpoints import price
+from app.api.endpoints import auth
 from app.services.scheduled_tasks import scheduled_task_manager
+from app.services.demo_service import demo_service
 
 # Import models to ensure they are registered with SQLAlchemy
 from app.models import asset
 from app.models import price_cache
+from app.models import session
 
 # Configure logging
 log_level = os.environ.get("LOG_LEVEL", "INFO")
@@ -58,11 +62,34 @@ async def lifespan(app: FastAPI):
             await conn.run_sync(metadata.create_all)
             logger.info("Database tables created successfully")
 
+            # Log authentication table creation
+            from app.core.auth_config import auth_settings
+
+            if auth_settings.auth_enabled:
+                logger.info("Authentication session table created and ready")
+
         # Apply database optimizations
         from app.db.optimizations import optimize_database
 
         await optimize_database()
         logger.info("Database optimization completed")
+
+        # Initialize authentication system
+        from app.core.auth_config import auth_settings
+
+        if auth_settings.auth_enabled:
+            logger.info(
+                f"Authentication system initialized - Demo mode: {auth_settings.DEMO_MODE}"
+            )
+            if auth_settings.DEMO_MODE:
+                logger.info("Demo credentials: username='demo', password='demo1'")
+        else:
+            logger.info("Authentication system disabled")
+
+        # Initialize demo mode if enabled
+        await demo_service.initialize_demo_mode()
+        await demo_service.ensure_demo_asset_exists()
+        logger.info("Demo mode initialization completed")
 
         # Start scheduled tasks
         await scheduled_task_manager.start_scheduled_tasks()
@@ -73,7 +100,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown: Stop scheduled tasks
+    # Shutdown: Stop scheduled tasks and demo service
     try:
         logger.info("Shutting down application...")
         await scheduled_task_manager.stop_scheduled_tasks()
@@ -108,6 +135,20 @@ def create_app() -> FastAPI:
 
     # Add error logging middleware
     app.add_middleware(ErrorLoggingMiddleware)
+
+    # Add authentication middleware conditionally (before performance monitoring)
+    from app.core.auth_config import auth_settings
+
+    # Debug logging for auth configuration
+    logger.info(
+        f"Auth configuration check: AUTH_USER={auth_settings.AUTH_USER}, AUTH_PASSWORD={'***' if auth_settings.AUTH_PASSWORD else None}, DEMO_MODE={auth_settings.DEMO_MODE}, auth_enabled={auth_settings.auth_enabled}"
+    )
+
+    if auth_settings.auth_enabled:
+        app.add_middleware(AuthenticationMiddleware)
+        logger.info("Authentication middleware enabled")
+    else:
+        logger.info("Authentication middleware disabled")
 
     # Add performance monitoring middleware
     from app.core.performance_monitoring import PerformanceMonitoringMiddleware
@@ -145,6 +186,9 @@ def create_app() -> FastAPI:
 
     # Register price endpoints under /api/v1/price
     app.include_router(price.router, prefix="/api/v1/price", tags=["price"])
+
+    # Register authentication endpoints under /api/v1/auth
+    app.include_router(auth.router, prefix="/api/v1/auth", tags=["authentication"])
 
     # Simple health check endpoint for quick testing
     @app.get("/api/health", tags=["health"])

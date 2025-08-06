@@ -398,6 +398,136 @@ class PriceService:
                 f"Could not fetch price for crypto {symbol} and no cached data available"
             )
 
+    async def get_derivative_price(
+        self,
+        db: AsyncSession,
+        isin: str,
+        force_refresh: bool = False,
+        allow_expired: bool = False,
+    ) -> Dict[str, any]:
+        """
+        Get derivative price using Onvista scraper with caching.
+
+        Args:
+            db: Database session
+            isin: ISIN of the derivative
+            force_refresh: If True, bypass cache and fetch fresh data
+            allow_expired: If True, allow expired cache data
+
+        Returns:
+            Dict with symbol, price, currency, cache info, and expiration details
+        """
+        from app.services.onvista_service import onvista_service
+
+        # Check cache first (unless force refresh)
+        if not force_refresh:
+            # Get any cached entry regardless of age for validation
+            cached_price = await crud_price_cache.get_cache_by_symbol(
+                db=db, symbol=isin, asset_type="derivative"
+            )
+
+            # Use centralized cache validation
+            if cached_price and (
+                cache_management_service.is_price_cache_valid(cached_price)
+                or allow_expired
+            ):
+                cache_expiration = cache_management_service.get_price_cache_expiration(
+                    cached_price
+                )
+                cache_age = cache_management_service.get_cache_age_minutes(cached_price)
+                is_valid = cache_management_service.is_price_cache_valid(cached_price)
+
+                return {
+                    "symbol": cached_price.symbol,
+                    "price": cached_price.price,
+                    "currency": cached_price.currency,
+                    "cached": True,
+                    "fetched_at": cached_price.fetched_at,
+                    "source": cached_price.source,
+                    "cache_valid_until": (
+                        cache_expiration.isoformat() if cache_expiration else None
+                    ),
+                    "cache_status": {
+                        "is_valid": is_valid,
+                        "age_minutes": cache_age,
+                        "expires_at": (
+                            cache_expiration.isoformat() if cache_expiration else None
+                        ),
+                        "ttl_minutes": settings.PRICE_CACHE_MINUTES,
+                        "using_expired_cache": not is_valid,
+                    },
+                }
+
+        # Fetch fresh data from Onvista
+        try:
+            onvista_data = await onvista_service.get_instrument_data(isin)
+            if onvista_data:
+                price = onvista_data["price"]
+                currency = onvista_data["currency"]
+                now = datetime.utcnow()
+
+                # Cache the result
+                await crud_price_cache.update_or_create_price_cache(
+                    db=db,
+                    symbol=isin,
+                    asset_type="derivative",
+                    price=price,
+                    currency=currency,
+                    source="onvista",
+                )
+
+                cache_expiration = now + timedelta(minutes=settings.PRICE_CACHE_MINUTES)
+
+                return {
+                    "symbol": isin,
+                    "price": price,
+                    "currency": currency,
+                    "cached": False,
+                    "fetched_at": now,
+                    "source": "onvista",
+                    "cache_valid_until": cache_expiration.isoformat(),
+                    "cache_status": {
+                        "is_valid": True,  # Just created, so it's valid
+                        "age_minutes": 0,
+                        "expires_at": cache_expiration.isoformat(),
+                        "ttl_minutes": settings.PRICE_CACHE_MINUTES,
+                        "using_expired_cache": False,
+                    },
+                }
+        except Exception as e:
+            print(f"[PriceService] Onvista error for {isin}: {e}")
+
+        # Handle API failure scenarios with cache fallback
+        # Try to fall back to any cached data (even if expired)
+        cached_price = await crud_price_cache.get_cache_by_symbol(
+            db=db, symbol=isin, asset_type="derivative"
+        )
+        if cached_price:
+            cache_expiration = cache_management_service.get_price_cache_expiration(
+                cached_price
+            )
+            cache_age = cache_management_service.get_cache_age_minutes(cached_price)
+            return {
+                "symbol": cached_price.symbol,
+                "price": cached_price.price,
+                "currency": cached_price.currency,
+                "cached": True,
+                "fetched_at": cached_price.fetched_at,
+                "source": cached_price.source,
+                "cache_valid_until": (
+                    cache_expiration.isoformat() if cache_expiration else None
+                ),
+                "cache_expired": not cache_management_service.is_price_cache_valid(
+                    cached_price
+                ),
+                "cache_age_minutes": cache_age,
+                "api_error": True,
+            }
+        else:
+            raise ValueError(
+                f"Could not fetch price for derivative {isin} and no cached data available"
+            )
+
 
 # Global instance
 price_service = PriceService()

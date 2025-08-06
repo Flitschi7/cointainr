@@ -1,7 +1,7 @@
 /**
  * Enum for supported asset types.
  */
-export type AssetType = 'cash' | 'stock' | 'crypto';
+export type AssetType = 'cash' | 'stock' | 'crypto' | 'derivative';
 
 /**
  * Asset interface representing a financial asset.
@@ -105,4 +105,28 @@ export interface AssetCacheStatus {
 	expires_at: string | null;
 	cache_age_minutes: number | null;
 	needs_refresh: boolean;
+}
+
+/**
+ * Authentication state interface for the auth store.
+ */
+export interface AuthState {
+	isAuthenticated: boolean;
+	isLoading: boolean;
+	error: string | null;
+	username: string;
+	demoMode: boolean;
+	expiresAt: string | null;
+	sessionToken: string | null;
+}
+
+/**
+ * Session data interface for persistence.
+ */
+export interface SessionData {
+	sessionToken: string;
+	username: string;
+	demoMode: boolean;
+	expiresAt: string;
+	lastValidated: string;
 }

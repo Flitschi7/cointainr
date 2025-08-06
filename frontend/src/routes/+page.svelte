@@ -24,6 +24,7 @@
 	import { debounce } from 'lodash-es';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import LogoutButton from '$lib/components/LogoutButton.svelte';
 
 	// Conditional logging - only in development
 	const isDev = import.meta.env.DEV;
@@ -145,7 +146,7 @@
 
 	let filterLocation = '';
 	let filterSymbol = '';
-	let filterType: 'all' | 'cash' | 'stock' | 'crypto' = 'all';
+	let filterType: 'all' | 'cash' | 'stock' | 'crypto' | 'derivative' = 'all';
 
 	// Sorting state
 	type SortField =
@@ -576,7 +577,7 @@
 		if (!sortedAssets.length || !pricesLoaded || isCalculatingTotals) return;
 
 		isCalculatingTotals = true;
-		
+
 		// Check if totals need recalculation
 		const totalsKey = `totals-${totalCurrency}-${sortedAssets.length}`;
 		const assetsHash = JSON.stringify(
@@ -630,8 +631,8 @@
 					continue;
 				}
 
-				// Handle stock and crypto assets
-				if (asset.type === 'stock' || asset.type === 'crypto') {
+				// Handle stock, crypto, and derivative assets
+				if (asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative') {
 					const currentPrice = getCurrentPrice(asset);
 					const quantity = asset.quantity || 0;
 					let currentValue = currentPrice * quantity;
@@ -832,6 +833,8 @@
 				await reloadCacheStatus();
 				// Also update frontend cache stats
 				await enhancedApi.getFrontendCacheStats();
+				// Force update the asset prices display by triggering reactivity
+				assetPrices = new Map(assetPrices);
 			}, 1500);
 
 			isDev && log('Manual price refresh completed successfully:', refreshResult);
@@ -916,68 +919,79 @@
 
 <div class="bg-background text-text-light min-h-screen p-4 sm:p-6 lg:p-8">
 	<header class="mb-6 sm:mb-8">
-		<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<h1 class="font-headline text-gold text-2xl sm:text-3xl lg:text-4xl">Cointainr</h1>
-			
-			<!-- Tab Navigation -->
-			<nav class="flex-shrink-0">
-				<div class="bg-surface rounded-lg p-1">
-					<div class="flex space-x-1">
-						{#each tabs as tab}
-							<button
-								class="flex items-center justify-center gap-2 px-3 py-2 rounded-md font-medium transition-all duration-200 text-sm {activeTab === tab.id
-									? 'bg-background text-text-light border border-gray-600'
-									: 'text-gray-400 hover:text-text-light hover:bg-background/50'}"
-								on:click={() => setActiveTab(tab.id)}
-							>
-								<span class="text-base">{tab.icon}</span>
-								<span class="hidden sm:inline">{tab.label}</span>
-							</button>
-						{/each}
+
+			<div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+				<!-- Tab Navigation -->
+				<nav class="flex-shrink-0">
+					<div class="bg-surface rounded-lg p-1">
+						<div class="flex space-x-1">
+							{#each tabs as tab}
+								<button
+									class="flex cursor-pointer items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200 {activeTab ===
+									tab.id
+										? 'bg-background text-text-light border border-gray-600'
+										: 'hover:text-text-light hover:bg-background/50 text-gray-400'}"
+									on:click={() => setActiveTab(tab.id)}
+								>
+									<span class="text-base">{tab.icon}</span>
+									<span class="hidden sm:inline">{tab.label}</span>
+								</button>
+							{/each}
+						</div>
 					</div>
-				</div>
-			</nav>
+				</nav>
+
+				<!-- Logout Button (only show if authentication is enabled) -->
+				{#if data.user}
+					<LogoutButton />
+				{/if}
+			</div>
 		</div>
 	</header>
 
 	<!-- Filters Section -->
-	<section class="bg-surface mb-6 sm:mb-8 rounded-lg p-4">
+	<section class="bg-surface mb-6 rounded-lg p-4 sm:mb-8">
 		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 			<div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
 				<input
 					type="text"
 					bind:value={filterLocation}
-					placeholder="Location/Broker..."
-					class="bg-background text-text-light rounded p-2 w-full sm:w-auto"
+					placeholder="Filter by location or broker..."
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-1 sm:w-auto"
 				/>
 				<input
 					type="text"
 					bind:value={filterSymbol}
-					placeholder="Symbol/ISIN..."
-					class="bg-background text-text-light rounded p-2 w-full sm:w-auto"
+					placeholder="Filter by symbol or ISIN..."
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-1 sm:w-auto"
 				/>
-				<select bind:value={filterType} class="bg-background text-text-light rounded p-2 w-full sm:w-auto">
-					<option value="all">All Types</option>
+				<select
+					bind:value={filterType}
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-1 sm:w-auto"
+				>
+					<option value="all">All asset types</option>
 					<option value="cash">Cash</option>
-					<option value="stock">Stock</option>
-					<option value="crypto">Crypto</option>
+					<option value="stock">Stocks</option>
+					<option value="crypto">Cryptocurrency</option>
+					<option value="derivative">Derivatives</option>
 				</select>
-				<div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2 sm:border-l sm:border-gray-600 sm:pl-4">
-					<label for="totalCurrency" class="text-text-light text-sm">Totals in:</label>
-					<div class="flex items-center gap-2">
-						<select
-							id="totalCurrency"
-							bind:value={totalCurrency}
-							class="bg-background text-text-light rounded border border-gray-600 px-3 py-1"
-						>
-							<option value="EUR">EUR</option>
-							<option value="USD">USD</option>
-							<option value="GBP">GBP</option>
-							<option value="CHF">CHF</option>
-						</select>
-						<!-- Compact Currency Rate Display -->
-						<CurrencyRateDisplay baseCurrency={totalCurrency} assets={allAssets} />
-					</div>
+				<div class="flex items-center gap-3 border-l border-gray-600 pl-4">
+					<label for="totalCurrency" class="text-text-light whitespace-nowrap text-sm font-medium">
+						Display currency:
+					</label>
+					<select
+						id="totalCurrency"
+						bind:value={totalCurrency}
+						class="bg-surface text-text-light focus:border-primary focus:ring-primary rounded-lg border border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-1"
+					>
+						<option value="EUR">EUR (€)</option>
+						<option value="USD">USD ($)</option>
+						<option value="GBP">GBP (£)</option>
+						<option value="CHF">CHF</option>
+					</select>
+					<CurrencyRateDisplay baseCurrency={totalCurrency} assets={allAssets} />
 				</div>
 			</div>
 			<div class="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -985,17 +999,16 @@
 				<button
 					on:click={handleRefreshAllPrices}
 					disabled={isRefreshing}
-					class="bg-primary border-primary flex items-center justify-center gap-2 rounded border p-2 font-bold text-white hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50 w-full sm:w-auto"
+					class="bg-primary focus:ring-primary flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-opacity-90 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
 					title="Force refresh all prices (bypass cache)"
 					aria-label="Force refresh all prices"
 				>
 					<svg
-						class="h-5 w-5"
+						class="h-4 w-4"
 						class:animate-spin={isRefreshing}
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
-						xmlns="http://www.w3.org/2000/svg"
 					>
 						<path
 							stroke-linecap="round"
@@ -1004,12 +1017,16 @@
 							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
 						></path>
 					</svg>
-					<span class="text-sm">Force Refresh</span>
+					<span>Force Refresh</span>
 				</button>
 				<button
 					on:click={openAddModal}
-					class="bg-gold rounded px-4 py-2 font-bold text-white hover:opacity-80 w-full sm:w-auto"
+					class="bg-gold focus:ring-gold flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-opacity-90 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 sm:w-auto"
 				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"
+						></path>
+					</svg>
 					Add Asset
 				</button>
 			</div>
@@ -1019,385 +1036,382 @@
 	<!-- Tab Content -->
 	{#if activeTab === 'portfolio'}
 		<!-- Portfolio Tab Content -->
-		<main class="bg-surface rounded-lg p-4 sm:p-6 shadow-lg">
-		<div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-			<h2 class="font-headline text-xl sm:text-2xl">Assets</h2>
-			<div class="text-sm text-gray-400">
-				Last refresh: {formatLastRefresh(lastRefreshTime)}
+		<main class="bg-surface rounded-lg p-4 shadow-lg sm:p-6">
+			<div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+				<h2 class="font-headline text-xl sm:text-2xl">Assets</h2>
+				<div class="text-sm text-gray-400">
+					Last refresh: {formatLastRefresh(lastRefreshTime)}
+				</div>
 			</div>
-		</div>
 
-		<!-- No need for additional refresh button as we have Force Refresh in the nav bar -->
-		{#if sortedAssets.length > 0}
-			<div class="overflow-x-auto rounded-lg">
-				<table class="rounded-table table-responsive w-full min-w-[800px] border-collapse border border-gray-600 font-mono text-sm">
-					<thead>
-						<tr class="bg-background border-b-2 border-gray-600">
-							<th
-								class="hover:bg-surface col-span-2 cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-left font-bold transition-colors"
-								on:click={() => handleSort('location')}
-							>
-								<div class="flex items-center justify-between">
-									Location/Broker
-									{#if sortField === 'location'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-left font-bold transition-colors"
-								on:click={() => handleSort('type')}
-							>
-								<div class="flex items-center justify-between">
-									Type
-									{#if sortField === 'type'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-left font-bold transition-colors"
-								on:click={() => handleSort('asset')}
-							>
-								<div class="flex items-center justify-between">
-									Asset
-									{#if sortField === 'asset'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
-								on:click={() => handleSort('quantity')}
-							>
-								<div class="flex items-center justify-end">
-									Quantity
-									{#if sortField === 'quantity'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
-								on:click={() => handleSort('purchasePrice')}
-							>
-								<div class="flex items-center justify-end">
-									Purchase Price
-									{#if sortField === 'purchasePrice'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
-								on:click={() => handleSort('currentPrice')}
-							>
-								<div class="flex items-center justify-end">
-									Current Price
-									{#if sortField === 'currentPrice'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
-								on:click={() => handleSort('value')}
-							>
-								<div class="flex items-center justify-end">
-									Value
-									{#if sortField === 'value'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
-								on:click={() => handleSort('yield')}
-							>
-								<div class="flex items-center justify-end">
-									Yield
-									{#if sortField === 'yield'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th
-								class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right font-bold transition-colors"
-								on:click={() => handleSort('performance')}
-							>
-								<div class="flex items-center justify-end">
-									Performance
-									{#if sortField === 'performance'}
-										<span class="text-primary ml-2">
-											{sortDirection === 'asc' ? '↑' : '↓'}
-										</span>
-									{:else}
-										<span class="ml-2 text-gray-500">↕</span>
-									{/if}
-								</div>
-							</th>
-							<th class="px-2 py-2 sm:px-4 sm:py-3 text-center font-bold">Status</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each sortedAssets as asset (asset.id)}
-							<tr
-								tabindex="0"
-								on:click={() => openEditModal(asset)}
-								on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openEditModal(asset)}
-								class="hover:bg-surface focus:ring-primary cursor-pointer border-b border-gray-600 transition-colors focus:ring-2 focus:outline-none"
-								aria-label={`Edit asset ${asset.name}`}
-							>
-								<!-- 1. Location/Broker -->
-								<td class="col-span-2 border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3">{asset.name}</td>
-
-								<!-- 2. Type -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 capitalize">{asset.type}</td>
-
-								<!-- 3. Asset -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3"
-									>{asset.assetname ?? asset.symbol ?? '-'}</td
+			<!-- No need for additional refresh button as we have Force Refresh in the nav bar -->
+			{#if sortedAssets.length > 0}
+				<div class="overflow-x-auto rounded-lg">
+					<table
+						class="rounded-table table-responsive w-full min-w-[800px] border-collapse border border-gray-600 font-mono text-sm"
+					>
+						<thead>
+							<tr class="bg-background border-b-2 border-gray-600">
+								<th
+									class="hover:bg-surface col-span-2 cursor-pointer border-r border-gray-600 px-2 py-2 text-left font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('location')}
 								>
+									<div class="flex items-center justify-between">
+										Location/Broker
+										{#if sortField === 'location'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-left font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('type')}
+								>
+									<div class="flex items-center justify-between">
+										Type
+										{#if sortField === 'type'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-left font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('asset')}
+								>
+									<div class="flex items-center justify-between">
+										Asset
+										{#if sortField === 'asset'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('quantity')}
+								>
+									<div class="flex items-center justify-end">
+										Quantity
+										{#if sortField === 'quantity'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('purchasePrice')}
+								>
+									<div class="flex items-center justify-end">
+										Purchase Price
+										{#if sortField === 'purchasePrice'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('currentPrice')}
+								>
+									<div class="flex items-center justify-end">
+										Current Price
+										{#if sortField === 'currentPrice'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('value')}
+								>
+									<div class="flex items-center justify-end">
+										Value
+										{#if sortField === 'value'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('yield')}
+								>
+									<div class="flex items-center justify-end">
+										Yield
+										{#if sortField === 'yield'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th
+									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
+									on:click={() => handleSort('performance')}
+								>
+									<div class="flex items-center justify-end">
+										Performance
+										{#if sortField === 'performance'}
+											<span class="text-primary ml-2">
+												{sortDirection === 'asc' ? '↑' : '↓'}
+											</span>
+										{:else}
+											<span class="ml-2 text-gray-500">↕</span>
+										{/if}
+									</div>
+								</th>
+								<th class="px-2 py-2 text-center font-bold sm:px-4 sm:py-3">Status</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each sortedAssets as asset (asset.id)}
+								<tr
+									tabindex="0"
+									on:click={() => openEditModal(asset)}
+									on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openEditModal(asset)}
+									class="hover:bg-background focus:ring-primary cursor-pointer border-b border-gray-600 transition-all duration-200 hover:shadow-sm focus:outline-none focus:ring-2"
+									aria-label={`Edit asset ${asset.name}`}
+								>
+									<!-- 1. Location/Broker -->
+									<td class="col-span-2 border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3"
+										>{asset.name}</td
+									>
 
-								<!-- 4. Quantity -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
-									{#if asset.type === 'cash'}
-										-
-									{:else}
-										{formatNumber(asset.quantity)}
-									{/if}
-								</td>
+									<!-- 2. Type -->
+									<td class="border-r border-gray-600 px-2 py-2 capitalize sm:px-4 sm:py-3"
+										>{asset.type}</td
+									>
 
-								<!-- 5. Purchase Price -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
-									{#if asset.purchase_price}
-										{formatCurrency(
-											asset.purchase_price,
-											asset.buy_currency ?? asset.currency ?? ''
-										)}
-									{:else}
-										-
-									{/if}
-								</td>
+									<!-- 3. Asset -->
+									<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3"
+										>{asset.assetname ?? asset.symbol ?? '-'}</td
+									>
 
-								<!-- 6. Current Price -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
-									{#if asset.type === 'cash'}
-										-
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
-										<ValueCell
-											symbol={asset.symbol ?? ''}
-											quantity={1}
-											currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-											assetType={asset.type}
-											{refreshTrigger}
-											showCacheStatus={false}
-										/>
-									{:else}
-										-
-									{/if}
-								</td>
+									<!-- 4. Quantity -->
+									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
+										{#if asset.type === 'cash'}
+											-
+										{:else}
+											{formatNumber(asset.quantity)}
+										{/if}
+									</td>
 
-								<!-- 7. Value -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
-									{#if asset.type === 'cash'}
-										{formatCurrency(asset.quantity, asset.currency ?? 'EUR')}
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
-										<ValueCell
-											symbol={asset.symbol ?? ''}
-											quantity={asset.quantity}
-											currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-											assetType={asset.type}
-											{refreshTrigger}
-											showCacheStatus={false}
-										/>
-									{:else}
-										-
-									{/if}
-								</td>
+									<!-- 5. Purchase Price -->
+									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
+										{#if asset.purchase_price}
+											{formatCurrency(
+												asset.purchase_price,
+												asset.buy_currency ?? asset.currency ?? ''
+											)}
+										{:else}
+											-
+										{/if}
+									</td>
 
-								<!-- 8. Yield -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
-									{#if asset.type === 'cash'}
-										-
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
-										<ProfitLossCell
-											symbol={asset.symbol ?? ''}
-											quantity={asset.quantity}
-											purchasePrice={asset.purchase_price}
-											currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-											assetType={asset.type}
-											{refreshTrigger}
-											displayType="absolute"
-											showCacheStatus={false}
-										/>
-									{:else}
-										-
-									{/if}
-								</td>
-
-								<!-- 9. Performance -->
-								<td class="border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3 text-right">
-									{#if asset.type === 'cash'}
-										-
-									{:else if asset.type === 'stock' || asset.type === 'crypto'}
-										<ProfitLossCell
-											symbol={asset.symbol ?? ''}
-											quantity={asset.quantity}
-											purchasePrice={asset.purchase_price}
-											currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-											assetType={asset.type}
-											{refreshTrigger}
-											displayType="percentage"
-											showCacheStatus={false}
-										/>
-									{:else}
-										-
-									{/if}
-								</td>
-
-								<!-- 10. Status -->
-								<td class="px-2 py-2 sm:px-4 sm:py-3 text-center">
-									{#if cacheStatusMap.has(asset.id)}
-										{@const cacheStatus = cacheStatusMap.get(asset.id)}
-										{#if cacheStatus}
-											<CacheStatusIndicator
-												cachedAt={cacheStatus.cached_at}
-												cacheTtlMinutes={cacheStatus.cache_ttl_minutes}
+									<!-- 6. Current Price -->
+									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
+										{#if asset.type === 'cash'}
+											-
+										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
+											<ValueCell
+												symbol={asset.symbol ?? ''}
+												quantity={1}
+												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
 												assetType={asset.type}
-												assetId={asset.id}
-												showExpirationTime={true}
-												showLabel={false}
+												{refreshTrigger}
+												showCacheStatus={false}
 											/>
+										{:else}
+											-
+										{/if}
+									</td>
+
+									<!-- 7. Value -->
+									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
+										{#if asset.type === 'cash'}
+											{formatCurrency(asset.quantity, asset.currency ?? 'EUR')}
+										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
+											<ValueCell
+												symbol={asset.symbol ?? ''}
+												quantity={asset.quantity}
+												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
+												assetType={asset.type}
+												{refreshTrigger}
+												showCacheStatus={false}
+											/>
+										{:else}
+											-
+										{/if}
+									</td>
+
+									<!-- 8. Yield -->
+									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
+										{#if asset.type === 'cash'}
+											-
+										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
+											<ProfitLossCell
+												symbol={asset.symbol ?? ''}
+												quantity={asset.quantity}
+												purchasePrice={asset.purchase_price}
+												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
+												assetType={asset.type}
+												{refreshTrigger}
+												displayType="absolute"
+												showCacheStatus={false}
+											/>
+										{:else}
+											-
+										{/if}
+									</td>
+
+									<!-- 9. Performance -->
+									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
+										{#if asset.type === 'cash'}
+											-
+										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
+											<ProfitLossCell
+												symbol={asset.symbol ?? ''}
+												quantity={asset.quantity}
+												purchasePrice={asset.purchase_price}
+												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
+												assetType={asset.type}
+												{refreshTrigger}
+												displayType="percentage"
+												showCacheStatus={false}
+											/>
+										{:else}
+											-
+										{/if}
+									</td>
+
+									<!-- 10. Status -->
+									<td class="px-2 py-2 text-center sm:px-4 sm:py-3">
+										{#if cacheStatusMap.has(asset.id)}
+											{@const cacheStatus = cacheStatusMap.get(asset.id)}
+											{#if cacheStatus}
+												<CacheStatusIndicator
+													cachedAt={cacheStatus.cached_at}
+													cacheTtlMinutes={cacheStatus.cache_ttl_minutes}
+													assetType={asset.type}
+													assetId={asset.id}
+													showExpirationTime={true}
+													showLabel={false}
+												/>
+											{:else}
+												🔴
+											{/if}
 										{:else}
 											🔴
 										{/if}
-									{:else}
-										🔴
-									{/if}
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr class="bg-background border-gold border-t-2 font-bold">
+								<!-- 1-2. Location/Broker + Type (colspan=2) -->
+								<td class="border-r border-gray-600 px-4 py-3" colspan="2">
+									<span class="text-gold">TOTAL ({sortedAssets.length} assets)</span>
 								</td>
-							</tr>
-						{/each}
-					</tbody>
-					<tfoot>
-						<tr class="bg-background border-gold border-t-2 font-bold">
-							<!-- 1-2. Location/Broker + Type (colspan=2) -->
-							<td class="border-r border-gray-600 px-4 py-3" colspan="2">
-								<span class="text-gold">TOTAL ({sortedAssets.length} assets)</span>
-							</td>
-							<!-- 3. Asset -->
-							<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
-							<!-- 4. Quantity -->
-							<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
-							<!-- 5. Purchase Price -->
-							<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
-							<!-- 6. Current Price -->
-							<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
-							<!-- 7. Value -->
-							<td class="text-gold border-r border-gray-600 px-4 py-3 text-right text-lg font-bold">
-								{formatCurrency(totalValue, totalCurrency)}
-							</td>
-							<!-- 8. Yield -->
-							<td class="border-r border-gray-600 px-4 py-3 text-right">
-								<span class={totalYield >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}>
-									{formatCurrency(totalYield, totalCurrency)}
-								</span>
-							</td>
-							<!-- 9. Performance -->
-							<td class="border-r border-gray-600 px-4 py-3 text-right">
-								<span
-									class={totalPerformance >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}
+								<!-- 3. Asset -->
+								<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
+								<!-- 4. Quantity -->
+								<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
+								<!-- 5. Purchase Price -->
+								<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
+								<!-- 6. Current Price -->
+								<td class="border-r border-gray-600 px-4 py-3 text-center">-</td>
+								<!-- 7. Value -->
+								<td
+									class="text-gold border-r border-gray-600 px-4 py-3 text-right text-lg font-bold"
 								>
-									{formatPercentage(totalPerformance)}
-								</span>
-							</td>
-							<!-- 10. Status -->
-							<td class="px-4 py-3 text-center">-</td>
-						</tr>
-					</tfoot>
-				</table>
-			</div>
-		{:else}
-			<p class="py-4 text-center">No matching assets found.</p>
-		{/if}
-	</main>
-
+									{formatCurrency(totalValue, totalCurrency)}
+								</td>
+								<!-- 8. Yield -->
+								<td class="border-r border-gray-600 px-4 py-3 text-right">
+									<span class={totalYield >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}>
+										{formatCurrency(totalYield, totalCurrency)}
+									</span>
+								</td>
+								<!-- 9. Performance -->
+								<td class="border-r border-gray-600 px-4 py-3 text-right">
+									<span
+										class={totalPerformance >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}
+									>
+										{formatPercentage(totalPerformance)}
+									</span>
+								</td>
+								<!-- 10. Status -->
+								<td class="px-4 py-3 text-center">-</td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			{:else}
+				<p class="py-4 text-center">No matching assets found.</p>
+			{/if}
+		</main>
 	{:else if activeTab === 'distribution'}
 		<!-- Distribution Tab Content -->
-		<main class="bg-surface rounded-lg p-4 sm:p-6 shadow-lg">
+		<main class="bg-surface rounded-lg p-4 shadow-lg sm:p-6">
 			<div class="mb-4">
 				<h2 class="font-headline text-xl sm:text-2xl">Asset Distribution</h2>
 			</div>
-			
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Asset Type Distribution Chart -->
 				<div class="bg-background rounded-lg p-6">
-					<h3 class="font-headline text-lg mb-4 text-gold">By Asset Type</h3>
-					<AssetTypePieChart 
-						assets={sortedAssets} 
-						{totalCurrency} 
+					<h3 class="font-headline text-gold mb-4 text-lg">By Asset Type</h3>
+					<AssetTypePieChart assets={sortedAssets} {totalCurrency} {assetPrices} {refreshTrigger} />
+				</div>
+
+				<div class="bg-background rounded-lg p-6">
+					<h3 class="font-headline text-gold mb-4 text-lg">By Broker</h3>
+					<BrokerPieChart assets={sortedAssets} {totalCurrency} {assetPrices} {refreshTrigger} />
+				</div>
+
+				<div class="bg-background rounded-lg p-6">
+					<h3 class="font-headline text-gold mb-4 text-lg">Asset Performance</h3>
+					<AssetPerformanceChart
+						assets={sortedAssets}
+						{totalCurrency}
 						{assetPrices}
 						{refreshTrigger}
 					/>
 				</div>
-				
+
 				<div class="bg-background rounded-lg p-6">
-					<h3 class="font-headline text-lg mb-4 text-gold">By Broker</h3>
-					<BrokerPieChart 
-						assets={sortedAssets} 
-						{totalCurrency} 
-						{assetPrices}
-						{refreshTrigger}
-					/>
-				</div>
-				
-				<div class="bg-background rounded-lg p-6">
-					<h3 class="font-headline text-lg mb-4 text-gold">Asset Performance</h3>
-					<AssetPerformanceChart 
-						assets={sortedAssets} 
-						{totalCurrency} 
-						{assetPrices}
-						{refreshTrigger}
-					/>
-				</div>
-				
-				<div class="bg-background rounded-lg p-6">
-					<h3 class="font-headline text-lg mb-4 text-gold">Top Holdings</h3>
-					<TopHoldings 
-						assets={sortedAssets} 
-						{totalCurrency} 
+					<h3 class="font-headline text-gold mb-4 text-lg">Top Holdings</h3>
+					<TopHoldings
+						assets={sortedAssets}
+						{totalCurrency}
 						{assetPrices}
 						{refreshTrigger}
 						maxHoldings={10}
@@ -1405,34 +1419,24 @@
 				</div>
 			</div>
 		</main>
-
 	{:else if activeTab === 'analytics'}
 		<!-- Analytics Tab Content -->
-		<main class="bg-surface rounded-lg p-4 sm:p-6 shadow-lg">
+		<main class="bg-surface rounded-lg p-4 shadow-lg sm:p-6">
 			<div class="mb-4">
 				<h2 class="font-headline text-xl sm:text-2xl">Portfolio Analytics</h2>
 			</div>
-			
-			<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
 				<!-- Portfolio Efficiency -->
 				<div class="bg-background rounded-lg p-6">
-					<PortfolioEfficiency 
-						assets={sortedAssets} 
-						{assetPrices}
-						{refreshTrigger}
-					/>
+					<PortfolioEfficiency assets={sortedAssets} {assetPrices} {refreshTrigger} />
 				</div>
-				
+
 				<!-- Portfolio Risk Score -->
 				<div class="bg-background rounded-lg p-6">
-					<PortfolioRiskScore 
-						assets={sortedAssets} 
-						{assetPrices}
-						{refreshTrigger}
-					/>
+					<PortfolioRiskScore assets={sortedAssets} {assetPrices} {refreshTrigger} />
 				</div>
 			</div>
 		</main>
 	{/if}
-
 </div>

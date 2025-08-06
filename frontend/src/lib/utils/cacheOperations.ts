@@ -2,7 +2,12 @@
  * Cache operations utilities for managing price and conversion caches
  */
 
-import { getStockPrice, getCryptoPrice, getConversionRate } from '$lib/services/api';
+import {
+	getStockPrice,
+	getCryptoPrice,
+	getDerivativePrice,
+	getConversionRate
+} from '$lib/services/api';
 import * as enhancedApi from '$lib/services/enhancedApi';
 import type { Asset, PriceResponse } from '$lib/types';
 import { assetCacheStatus } from '$lib/stores/assetStatusStore';
@@ -43,6 +48,8 @@ export async function getAssetPrice(
 			priceData = await getStockPrice(asset.symbol || '', forceRefresh);
 		} else if (asset.type === 'crypto') {
 			priceData = await getCryptoPrice(asset.symbol || '', forceRefresh);
+		} else if (asset.type === 'derivative') {
+			priceData = await getDerivativePrice(asset.symbol || '', forceRefresh);
 		} else {
 			throw new Error(`Unsupported asset type: ${asset.type}`);
 		}

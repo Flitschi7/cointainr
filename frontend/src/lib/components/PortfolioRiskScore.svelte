@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Asset } from '$lib/types';
 	import { formatPercentage, formatCurrency } from '$lib/utils/numberFormat';
+	import * as enhancedApi from '$lib/services/enhancedApi';
 
 	export let assets: Asset[] = [];
 
@@ -31,7 +32,7 @@
 			};
 		}
 
-		// Calculate asset values for concentration analysis
+		// For sync fallback, use simple calculation without currency conversion
 		const assetValues: { [id: number]: number } = {};
 		let totalValue = 0;
 
@@ -48,6 +49,55 @@
 			assetValues[asset.id] = value;
 			totalValue += value;
 		});
+
+		return calculateRiskFromValues(assetValues, totalValue);
+	}
+
+	async function calculateRiskMetricsAsync(): Promise<RiskMetrics> {
+		const targetCurrency = 'EUR';
+
+		// Calculate asset values for concentration analysis with currency conversion
+		const assetValues: { [id: number]: number } = {};
+		let totalValue = 0;
+
+		for (const asset of assets) {
+			let value = 0;
+			
+			if (asset.type === 'cash') {
+				value = asset.quantity;
+			} else {
+				const priceData = assetPrices.get(asset.id);
+				
+				if (priceData) {
+					let currentValue = priceData.price * asset.quantity;
+					const priceCurrency = priceData.currency;
+
+					// Convert to target currency if needed
+					if (priceCurrency !== targetCurrency) {
+						try {
+							const conversionData = await enhancedApi.convertCurrency(
+								priceCurrency,
+								targetCurrency,
+								currentValue,
+								{ forceRefresh: false }
+							);
+							currentValue = conversionData.converted;
+						} catch (error) {
+							console.error(`Failed to convert ${priceCurrency} to ${targetCurrency}:`, error);
+						}
+					}
+
+					value = currentValue;
+				}
+			}
+			assetValues[asset.id] = value;
+			totalValue += value;
+		}
+
+		return calculateRiskFromValues(assetValues, totalValue);
+	}
+
+	function calculateRiskFromValues(assetValues: { [id: number]: number }, totalValue: number): RiskMetrics {
 
 		// 1. Diversification Score (0-100)
 		const assetTypes = new Set(assets.map(a => a.type));
@@ -98,7 +148,7 @@
 		const recommendations: string[] = [];
 		
 		if (assetTypes.size < 3) {
-			const allTypes: ('cash' | 'stock' | 'crypto')[] = ['cash', 'stock', 'crypto'];
+			const allTypes: ('cash' | 'stock' | 'crypto' | 'derivative')[] = ['cash', 'stock', 'crypto', 'derivative'];
 			const missing = allTypes.filter(type => !assetTypes.has(type));
 			recommendations.push(`Consider adding ${missing.join(' and ')} to diversify asset types`);
 		}
@@ -143,7 +193,12 @@
 
 	// Reactive calculation
 	$: if (assets && assetPrices && (refreshTrigger || refreshTrigger === 0)) {
-		riskMetrics = calculateRiskMetrics();
+		calculateRiskMetricsAsync().then(result => {
+			riskMetrics = result;
+		}).catch(error => {
+			console.error('Error calculating risk metrics:', error);
+			riskMetrics = calculateRiskMetrics(); // Fallback to sync version
+		});
 	}
 </script>
 

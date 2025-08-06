@@ -5,6 +5,7 @@ from app.crud import crud_asset
 from app.models import asset as asset_model
 from app.schemas import asset as asset_schema
 from app.db.session import SessionLocal
+from app.services.onvista_service import onvista_service
 
 router = APIRouter()
 
@@ -125,6 +126,22 @@ async def create_asset(
                 print(f"[Assets] CoinGecko error for {identifier}: {e}")
                 # Fallback: use capitalized symbol
                 assetname = identifier.upper()
+
+        # Handle derivatives - use Onvista scraper
+        elif asset_type == "derivative":
+            try:
+                # For derivatives, we expect the identifier to be an ISIN
+                onvista_data = await onvista_service.get_instrument_data(identifier)
+                if onvista_data:
+                    assetname = onvista_data.get("name")
+                    # Note: We could also store the current price, but that's handled by price service
+                else:
+                    # Fallback: use the ISIN as assetname
+                    assetname = identifier
+            except Exception as e:
+                print(f"[Assets] Onvista error for {identifier}: {e}")
+                # Fallback: use the ISIN as assetname
+                assetname = identifier
 
         # Handle stocks/ETFs - use existing logic
         elif asset_type == "stock":

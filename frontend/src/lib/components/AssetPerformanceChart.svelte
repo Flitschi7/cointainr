@@ -26,14 +26,24 @@
 		const performanceData: AssetPerformance[] = [];
 
 		assets.forEach(asset => {
+
 			// Skip cash assets as they don't have performance
-			if (asset.type === 'cash') return;
+			if (asset.type === 'cash') {
+			}
 			
 			// Skip assets without purchase price
-			if (!asset.purchase_price) return;
+			if (!asset.purchase_price) {
+				console.log(`[DEBUG] Skipping asset without purchase price: ${asset.symbol}`);
+				return;
+			}
 
 			const priceData = assetPrices.get(asset.id);
-			if (!priceData) return;
+			console.log(`[DEBUG] Price data for asset ${asset.symbol} (ID: ${asset.id}):`, priceData);
+			
+			if (!priceData) {
+				console.log(`[DEBUG] No price data found for asset: ${asset.symbol}`);
+				return;
+			}
 
 			const currentValue = priceData.price * asset.quantity;
 			const purchaseValue = asset.purchase_price * asset.quantity;

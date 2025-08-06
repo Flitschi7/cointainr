@@ -11,6 +11,7 @@ class AssetType(str, enum.Enum):
     CASH = "cash"
     STOCK = "stock"
     CRYPTO = "crypto"
+    DERIVATIVE = "derivative"
 
 
 class Asset(Base):

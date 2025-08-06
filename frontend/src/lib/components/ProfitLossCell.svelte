@@ -14,7 +14,7 @@
 	export let quantity: number;
 	export let purchasePrice: number | null;
 	export let currency: string;
-	export let assetType: 'stock' | 'crypto';
+	export let assetType: 'stock' | 'crypto' | 'derivative';
 	export let refreshTrigger: number = 0;
 	export let displayType: 'percentage' | 'absolute' = 'percentage';
 	export let showCacheStatus: boolean = false; // Whether to show cache status indicator

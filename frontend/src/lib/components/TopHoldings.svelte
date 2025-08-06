@@ -83,6 +83,7 @@
 			case 'cash': return '💰';
 			case 'stock': return '📈';
 			case 'crypto': return '₿';
+			case 'derivative': return '💸';
 			default: return '❓';
 		}
 	}

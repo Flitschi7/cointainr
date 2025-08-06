@@ -59,6 +59,18 @@ services:
       - ENABLE_JSON_LOGGING=false
 
       # =============================================================================
+      # AUTHENTICATION CONFIGURATION (Optional)
+      # =============================================================================
+      # Enable authentication by setting both AUTH_USER and AUTH_PASSWORD
+      # Leave commented out to disable authentication (default behavior)
+      # - AUTH_USER=admin
+      # - AUTH_PASSWORD=your_secure_password_here
+
+      # Session Configuration (Optional - uses defaults if not set)
+      # - SESSION_SECRET_KEY=your_random_secret_key_here
+      # - SESSION_TIMEOUT_HOURS=24
+
+      # =============================================================================
       # SYSTEM CONFIGURATION
       # =============================================================================
       - PYTHONUNBUFFERED=1
