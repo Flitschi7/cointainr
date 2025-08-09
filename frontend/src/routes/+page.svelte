@@ -917,7 +917,7 @@
 	</Modal>
 {/if}
 
-<div class="bg-background text-text-light min-h-screen p-4 sm:p-6 lg:p-8">
+<div class="bg-background text-text-light min-h-screen overflow-x-hidden p-4 sm:p-6 lg:p-8">
 	<header class="mb-6 sm:mb-8">
 		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 			<h1 class="font-headline text-gold text-2xl sm:text-3xl lg:text-4xl">Cointainr</h1>

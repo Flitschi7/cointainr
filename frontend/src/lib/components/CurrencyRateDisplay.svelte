@@ -11,7 +11,15 @@
 	export let baseCurrency: string = 'EUR'; // The currency everything is converted to
 	export let assets: any[] = []; // Assets to determine which currencies are relevant
 
+	// Types for currency rate info stored in the map
+	type CurrencyRateInfo = {
+		rate: number;
+		isStale: boolean;
+		ageInHours: number;
+	};
+
 	// Get unique currencies from assets that are different from base currency
+	let relevantCurrencies: string[] = [];
 	$: relevantCurrencies = [
 		...new Set(
 			assets
@@ -50,7 +58,7 @@
 		devLog.debug('CurrencyRateDisplay - Relevant currencies:', relevantCurrencies);
 	}
 
-	let currencyRates: Map<string, { rate: number; cached: boolean }> = new Map();
+	let currencyRates: Map<string, CurrencyRateInfo> = new Map();
 	let isRefreshing = false;
 	let lastRefreshTime: Date | null = null;
 
@@ -71,7 +79,7 @@
 
 					return {
 						currency,
-						rate: rateData.rate,
+						rate: Number(rateData.rate) || 0,
 						isStale: isStale,
 						ageInHours: ageInHours
 					};
@@ -118,7 +126,7 @@
 					// Fresh data is never stale
 					return {
 						currency,
-						rate: rateData.rate,
+						rate: Number(rateData.rate) || 0,
 						isStale: false,
 						ageInHours: 0
 					};
@@ -159,10 +167,11 @@
 </script>
 
 <div
-	class="bg-surface text-text-light flex items-center gap-2 rounded-lg border border-gray-600 px-3 py-2 text-sm"
+	class="bg-surface text-text-light flex items-center gap-2 rounded-lg border border-gray-600 px-3 py-2 text-sm max-w-full"
+	style="overflow-x:auto;"
 >
 	{#if relevantCurrencies.length > 0}
-		<div class="flex items-center gap-3">
+	<div class="flex items-center gap-3 flex-wrap">
 			{#each Array.from(currencyRates.entries()) as [currency, rateInfo]}
 				<div class="flex items-center gap-1">
 					<span class="font-medium text-gray-400">{currency}→{baseCurrency}:</span>

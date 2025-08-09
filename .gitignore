@@ -46,7 +46,7 @@ instructions.instructions.md
 
 # Virtual Environment
 /backend/.venv/
-
+/docs
 # Cache and compiled files
 __pycache__/
 *.pyc
