@@ -36,7 +36,6 @@ docker-compose-test.yml
 .env.*
 !.env.example
 !.env.test
-instructions.instructions.md
 
 # =============================================================================
 # Python / Backend
