@@ -174,7 +174,9 @@ describe('Enhanced API Service', () => {
 				from: 'USD',
 				to: 'USD',
 				rate: 1,
-				cached: true
+				cached: true,
+				fetched_at: expect.any(String),
+				source: 'system'
 			});
 		});
 

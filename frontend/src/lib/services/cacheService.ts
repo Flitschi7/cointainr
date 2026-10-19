@@ -13,6 +13,7 @@ export interface CacheEntry<T> {
 	data: T;
 	timestamp: number;
 	isStale: boolean;
+	ttl?: number;
 }
 
 /**
@@ -53,7 +54,7 @@ export class CacheService {
 	 * @param defaultTTL Default time-to-live in milliseconds
 	 */
 	constructor(defaultTTL?: number) {
-		if (defaultTTL) {
+		if (defaultTTL !== undefined) {
 			this.defaultTTL = defaultTTL;
 		}
 
@@ -73,14 +74,14 @@ export class CacheService {
 		fetchFn: () => Promise<T>,
 		options?: Partial<CacheOptions>
 	): Promise<T> {
-		const ttl = options?.ttl || this.defaultTTL;
+		const ttl = options?.ttl;
 		const forceRefresh = options?.forceRefresh || false;
 
 		// Determine cache type for performance tracking
 		const cacheType = key.includes('price') ? 'price' : 'conversion';
 
 		// Check if we should use cache
-		if (!forceRefresh && this.has(key)) {
+		if (!forceRefresh && this.isCacheValid(key, ttl)) {
 			const entry = this.get<T>(key);
 			if (entry) {
 				// Increment hit count
@@ -149,7 +150,8 @@ export class CacheService {
 		const entry: CacheEntry<T> = {
 			data,
 			timestamp,
-			isStale: false
+			isStale: false,
+			ttl: ttl ?? this.defaultTTL
 		};
 
 		this.cache.set(key, entry);
@@ -198,9 +200,9 @@ export class CacheService {
 		}
 
 		const now = Date.now();
-		const expiryTime = entry.timestamp + (ttl || this.defaultTTL);
+		const expiryTime = entry.timestamp + (ttl ?? entry.ttl ?? this.defaultTTL);
 
-		return now > expiryTime;
+		return now >= expiryTime;
 	}
 
 	/**
@@ -271,7 +273,7 @@ export class CacheService {
 			return -1;
 		}
 
-		const expiryTime = entry.timestamp + (ttl || this.defaultTTL);
+		const expiryTime = entry.timestamp + (ttl ?? entry.ttl ?? this.defaultTTL);
 		return expiryTime - Date.now();
 	}
 
@@ -284,7 +286,7 @@ export class CacheService {
 	formatTimeUntilExpiration(key: string, ttl?: number): string {
 		const timeMs = this.getTimeUntilExpiration(key, ttl);
 
-		if (timeMs < 0) {
+		if (timeMs <= 0) {
 			return 'Expired';
 		}
 
@@ -506,7 +508,7 @@ export class CacheService {
 				for (const [key, entry] of Object.entries(parsed)) {
 					const cacheEntry = entry as CacheEntry<any>;
 					// Only load non-expired entries
-					if (now - cacheEntry.timestamp < this.defaultTTL) {
+					if (now - cacheEntry.timestamp < (cacheEntry.ttl ?? this.defaultTTL)) {
 						this.cache.set(key, cacheEntry);
 					}
 				}

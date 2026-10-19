@@ -138,7 +138,7 @@
 				profitLossPercentage = ((convertedCurrentPrice - purchasePrice) / purchasePrice) * 100;
 
 				// Only log in debug mode to reduce console noise
-				if (process.env.NODE_ENV !== 'production') {
+				if (import.meta.env.DEV) {
 					console.debug(
 						`${symbol} profit/loss calculation: ${isCached ? 'Using cached data' : 'Using fresh data'}`
 					);

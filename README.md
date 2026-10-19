@@ -18,6 +18,18 @@ _A modern, self-hosted portfolio tracking app with a focus on clarity, technolog
 
 Cointainr is a self-hosted financial portfolio tracker that puts you in complete control of your data. Track stocks, cryptocurrencies, and cash holdings across multiple currencies with automatic price updates and intelligent caching. No third-party data sharing, no monthly fees - just your data, on your terms.
 
+### Development Planning
+
+See the [optimization roadmap](docs/OPTIMIZATION_ROADMAP.md) for prioritized,
+evidence-based improvements and acceptance checks. [AGENTS.md](AGENTS.md)
+describes the repository-specific Copilot agents, local issue workflow, and
+commit/publication rules. Select the agents from `.github/agents/` in Copilot.
+
+Use the Node version in [frontend/.nvmrc](frontend/.nvmrc) for local frontend
+development; Docker and CI use the same major version. CI runs the frontend
+typecheck, unit tests, and build before image publication. Pull requests validate
+the image without publishing it.
+
 ### 🌐 Try the Demo
 
 Experience Cointainr in action at **[cointainr.pw](https://cointainr.pw)**
@@ -119,13 +131,11 @@ Cointainr uses intelligent caching to respect API rate limits:
 ### Adding Assets
 
 1. **Cash Holdings**: Add bank accounts, savings, etc.
-
    - Name: "Savings Account"
    - Amount: 5000
    - Currency: EUR
 
 2. **Stocks/ETFs**: Track individual positions
-
    - Symbol: "AAPL" or "A1JX52"
    - Quantity: 10 shares
    - Purchase Price: 150.00 (optional)
