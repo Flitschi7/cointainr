@@ -73,8 +73,45 @@ SQLite database passed real ASGI startup, health/HTML/compiled-asset HTTP checks
 table initialization, and SQLite integrity checking. It was removed after the
 test, without mounting host data. ARM64 builds, remote cache reuse, registry
 publication, and actual GitHub workflow runs remain unverified in this pass.
-The clean Docker dependency installation also reported 41 npm audit findings
-(including 4 critical); they have not been triaged or automatically upgraded.
+The clean Docker dependency installation initially reported 41 npm audit
+findings (including 4 critical), the baseline for the security follow-up below.
+
+### Dependency security follow-up
+
+- Updated vulnerable dependency families within their existing version ranges,
+   including Svelte, SvelteKit, Vite, Playwright, Lodash, and TypeScript ESLint,
+   then applied compatible transitive security fixes without `--force`.
+- Upgraded Vitest and its UI together from 3.2.4 to 4.1.12. The older test-runner
+   line retained vulnerable mocker/worker dependencies; the existing service
+   regressions pass without changes under Vitest 4.
+- Added two narrowly scoped [npm overrides](../frontend/package.json):
+   SvelteKit uses Cookie 0.7.2 or newer within 0.7, and Typography uses
+   postcss-selector-parser 7.1.6 or newer within 7. These preserve the current
+   SvelteKit 2/Vite 7/TypeScript 5 stack and upgrade the parser rather than
+   accepting npm's suggested Typography downgrade to 0.5.4. Remove the overrides
+   once upstream dependencies adopt fixed versions and repeat the checks.
+- Compared old/new lockfile versions and checked resolved download sources:
+   no compared package path was downgraded and all tarballs use the official
+   npm registry. Local npm 12 needed an explicitly approved, command-only URL
+   download allowance during resolution; no project/global policy was changed.
+
+Validation: `npm audit` reports **0 findings**, down from 41; the production-only
+audit reports **0**, down from 1. This is an npm advisory result, not a backend
+dependency or container-OS security scan. Svelte check reports zero errors and
+warnings; all 38 unit tests, the production build, installed peer-tree checks,
+and dependency-file formatting pass. Cookie parsing/serialization, invalid
+input rejection, and Typography selector/pseudo handling pass focused checks.
+
+A clean Linux `npm ci` and production image build pass, followed by the same
+offline, tmpfs-backed startup/health/HTML/asset/SQLite integrity checks. Windows
+`npm ci` was blocked by a loaded native CSS DLL; local packages were restored
+with `npm install`, and local checks pass, but a clean Windows reinstall is not
+claimed. Desktop (1440px) and mobile (390px) browser smoke checks with synthetic
+API fixtures verify portfolio rendering, nonblank distribution charts, tab
+navigation, and opening/switching/closing the asset form, without horizontal
+page overflow or uncaught JavaScript errors. No real holdings or providers
+were used; full authenticated CRUD E2E, ARM64, and GitHub execution remain
+unverified. Repository-wide lint is not claimed to pass.
 
 ## Initial audit priorities and evidence
 
