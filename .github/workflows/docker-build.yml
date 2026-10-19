@@ -9,6 +9,16 @@ on:
     branches:
       - main
       - beta
+  workflow_dispatch:
+    inputs:
+      publish_beta:
+        description: Publish the beta image for AMD64 and ARM64 (select beta branch)
+        type: boolean
+        default: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/beta') }}
 
 permissions:
   contents: read
@@ -20,6 +30,7 @@ env:
 jobs:
   frontend-checks:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: frontend
@@ -52,30 +63,32 @@ jobs:
     if: github.event_name == 'pull_request'
     needs: frontend-checks
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Validate Docker image without publishing
+      - name: Validate AMD64 Docker image without publishing
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: false
-          cache-from: type=gha
+          cache-from: type=gha,scope=cointainr-image
+          cache-to: type=gha,scope=cointainr-image,mode=max
 
   build-and-push:
-    if: github.event_name == 'push'
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/beta' && inputs.publish_beta == true)
     needs: frontend-checks
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: write
       packages: write
@@ -171,8 +184,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=cointainr-image
+          cache-to: type=gha,scope=cointainr-image,mode=max
 
       - name: Create Release
         if: steps.version.outputs.create_release == 'true'

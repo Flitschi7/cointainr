@@ -1,7 +1,7 @@
 # Cointainr Optimization Roadmap
 
 Reviewed: 2026-10-19. This document retains the initial audit and records the
-first implementation pass below. Recheck remaining findings against current
+implementation passes below. Recheck remaining findings against current
 code before starting a ticket. No latency, memory, or accuracy gains have been
 measured yet; effort bands are planning estimates, not promises.
 
@@ -10,28 +10,28 @@ measured yet; effort bands are planning estimates, not promises.
 Completed in the first optimization pass:
 
 - Fixed frontend cache hits ignoring expiry, stored per-entry TTLs, honored zero
-   TTL and exact expiry boundaries, and retained stale data on fetch failure.
-   Added six regressions, including legacy stored entries and matching expiry
-   countdowns at custom-TTL boundaries.
+  TTL and exact expiry boundaries, and retained stale data on fetch failure.
+  Added six regressions, including legacy stored entries and matching expiry
+  countdowns at custom-TTL boundaries.
 - Corrected the same-currency API test to assert existing response metadata.
-   Both initial failing tests now pass: **38 unit tests pass across 2 suites**.
+  Both initial failing tests now pass: **38 unit tests pass across 2 suites**.
 - Removed whole-process environment injection and redundant output overrides
-   from [Vite config](../frontend/vite.config.ts). Development logging uses
-   `import.meta.env.DEV`; the build no longer emits those configuration warnings.
+  from [Vite config](../frontend/vite.config.ts). Development logging uses
+  `import.meta.env.DEV`; the build no longer emits those configuration warnings.
 - Aligned [Docker](../Dockerfile) and [local Node version](../frontend/.nvmrc)
-   on Node 24. CI uses the same version file.
+  on Node 24. CI uses the same version file.
 - Added typecheck/unit/build gates, read-only multi-architecture PR validation,
-   and a push-only publication job in the [workflow](../.github/workflows/docker-build.yml).
-   PRs targeting both `main` and `beta` are validated without registry login.
+  and a push-only publication job in the [workflow](../.github/workflows/docker-build.yml).
+  PRs targeting both `main` and `beta` are validated without registry login.
 - Removed three unreferenced internal components: ConfigurationDisplay,
-   CorrelationMatrix, and PerformanceMonitor. The correlation prototype generated
-   random data; the active performance-monitoring service remains. This is a
-   maintainability cleanup, not a measured bundle-size improvement.
+  CorrelationMatrix, and PerformanceMonitor. The correlation prototype generated
+  random data; the active performance-monitoring service remains. This is a
+  maintainability cleanup, not a measured bundle-size improvement.
 - Replaced the obsolete always-loaded project plan with a short
-   [repository guide](../.github/instructions/instructions.instructions.md),
-   [frontend design/behavior rules](../.github/instructions/frontend.instructions.md),
-   and [backend safety rules](../.github/instructions/backend.instructions.md).
-   The main instruction file is no longer ignored by Git.
+  [repository guide](../.github/instructions/instructions.instructions.md),
+  [frontend design/behavior rules](../.github/instructions/frontend.instructions.md),
+  and [backend safety rules](../.github/instructions/backend.instructions.md).
+  The main instruction file is no longer ignored by Git.
 
 Verification: frontend unit tests pass; Svelte check reports zero errors and
 warnings; production build passes; touched frontend files are formatted;
@@ -40,11 +40,78 @@ touched frontend files retain 10 pre-existing ESLint errors, down from 11 at
 the initial commit, with no new rule/message diagnostics. Repository-wide lint
 is not claimed to pass.
 
-Docker Desktop's Linux engine was unavailable, so image builds, container
-startup, and actual GitHub workflow execution remain unverified. Backend tests,
-E2E, provider calls, and performance benchmarks were not run. No databases or
-holdings were changed. Financial totals/cost-basis fixes remain the next
+Docker Desktop's Linux engine was unavailable during that first pass; local
+image and startup verification is recorded in the follow-up below. Actual
+GitHub workflow execution remains unverified. Backend tests, E2E, provider
+calls, and application performance benchmarks were not run. No user databases
+or holdings were changed. Financial totals/cost-basis fixes remain the next
 correctness priority; do not treat this pass as completing every audit item.
+
+### Build process follow-up
+
+- Beta pushes retain automatic frontend checks but no longer publish images.
+  A manual `workflow_dispatch` with `publish_beta: true` on `beta` publishes
+  AMD64/ARM64 beta images after successful checks. The trigger must first be
+  present on `main` to be available in GitHub's Actions interface.
+- PR image validation uses native AMD64 only, without QEMU or registry login.
+  Stable releases retain AMD64/ARM64 publication and existing version markers.
+- Superseded beta-push/PR runs are cancelled; main and manual publication runs
+  are not automatically cancelled. Jobs have explicit time limits. PR and
+  publication builds use the same image-cache scope with cache export enabled;
+  GitHub's branch access rules still apply.
+- The Docker context now allows only Dockerfile inputs, keeping local build
+  output, installed dependencies, environment files, private data directories,
+  and database files out of context. No persisted volume paths were changed.
+
+Validation: workflow YAML and seven publication scenarios pass local assertions,
+including PR permissions, cancellation conditions, cache configuration, and
+platform selection. The local Linux/AMD64 production image builds successfully.
+A repeat build reused all application layers and completed in 2.07 seconds on
+this machine; this is not a before/after GitHub cost benchmark. An ephemeral
+container with network access disabled, placeholder provider keys, and a tmpfs
+SQLite database passed real ASGI startup, health/HTML/compiled-asset HTTP checks,
+table initialization, and SQLite integrity checking. It was removed after the
+test, without mounting host data. ARM64 builds, remote cache reuse, registry
+publication, and actual GitHub workflow runs remain unverified in this pass.
+The clean Docker dependency installation initially reported 41 npm audit
+findings (including 4 critical), the baseline for the security follow-up below.
+
+### Dependency security follow-up
+
+- Updated vulnerable dependency families within their existing version ranges,
+  including Svelte, SvelteKit, Vite, Playwright, Lodash, and TypeScript ESLint,
+  then applied compatible transitive security fixes without `--force`.
+- Upgraded Vitest and its UI together from 3.2.4 to 4.1.12. The older test-runner
+  line retained vulnerable mocker/worker dependencies; the existing service
+  regressions pass without changes under Vitest 4.
+- Added two narrowly scoped [npm overrides](../frontend/package.json):
+  SvelteKit uses Cookie 0.7.2 or newer within 0.7, and Typography uses
+  postcss-selector-parser 7.1.6 or newer within 7. These preserve the current
+  SvelteKit 2/Vite 7/TypeScript 5 stack and upgrade the parser rather than
+  accepting npm's suggested Typography downgrade to 0.5.4. Remove the overrides
+  once upstream dependencies adopt fixed versions and repeat the checks.
+- Compared old/new lockfile versions and checked resolved download sources:
+  no compared package path was downgraded and all tarballs use the official
+  npm registry. Local npm 12 needed an explicitly approved, command-only URL
+  download allowance during resolution; no project/global policy was changed.
+
+Validation: `npm audit` reports **0 findings**, down from 41; the production-only
+audit reports **0**, down from 1. This is an npm advisory result, not a backend
+dependency or container-OS security scan. Svelte check reports zero errors and
+warnings; all 38 unit tests, the production build, installed peer-tree checks,
+and dependency-file formatting pass. Cookie parsing/serialization, invalid
+input rejection, and Typography selector/pseudo handling pass focused checks.
+
+A clean Linux `npm ci` and production image build pass, followed by the same
+offline, tmpfs-backed startup/health/HTML/asset/SQLite integrity checks. Windows
+`npm ci` was blocked by a loaded native CSS DLL; local packages were restored
+with `npm install`, and local checks pass, but a clean Windows reinstall is not
+claimed. Desktop (1440px) and mobile (390px) browser smoke checks with synthetic
+API fixtures verify portfolio rendering, nonblank distribution charts, tab
+navigation, and opening/switching/closing the asset form, without horizontal
+page overflow or uncaught JavaScript errors. No real holdings or providers
+were used; full authenticated CRUD E2E, ARM64, and GitHub execution remain
+unverified. Repository-wide lint is not claimed to pass.
 
 ## Initial audit priorities and evidence
 
