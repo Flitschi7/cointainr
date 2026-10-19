@@ -31,11 +31,11 @@ typecheck, unit tests, and build before image publication.
 
 ### Build and Publication
 
-| Event | Automatic work |
-| --- | --- |
-| Push to `beta` | Frontend typecheck, unit tests, and build; no image publication |
-| PR targeting `main` or `beta` | Frontend checks plus an AMD64 image build; no publication |
-| Push to `main` | Frontend checks, AMD64/ARM64 image publication, and the existing release workflow |
+| Event                         | Automatic work                                                                    |
+| ----------------------------- | --------------------------------------------------------------------------------- |
+| Push to `beta`                | Frontend typecheck, unit tests, and build; no image publication                   |
+| PR targeting `main` or `beta` | Frontend checks plus an AMD64 image build; no publication                         |
+| Push to `main`                | Frontend checks, AMD64/ARM64 image publication, and the existing release workflow |
 
 Newer beta-push and PR runs cancel superseded runs for the same event/ref.
 Release runs are not automatically cancelled. Docker jobs import and export
