@@ -12,6 +12,7 @@ describe('CacheService', () => {
 
 	afterEach(() => {
 		vi.useRealTimers();
+		vi.unstubAllGlobals();
 	});
 
 	it('should store and retrieve data from cache', () => {
@@ -69,6 +70,83 @@ describe('CacheService', () => {
 		const result3 = await cacheService.getOrFetch(key, fetchFn);
 		expect(result3).toEqual(freshData);
 		expect(fetchFn).toHaveBeenCalledTimes(2);
+	});
+
+	it('should preserve an entry-specific TTL when fetching without options', async () => {
+		const fetchFn = vi.fn().mockResolvedValue('fresh');
+		cacheService.set('custom-ttl', 'cached', 200);
+
+		vi.advanceTimersByTime(201);
+
+		expect(await cacheService.getOrFetch('custom-ttl', fetchFn)).toBe('fresh');
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+	});
+
+	it('should expire an entry at its exact TTL boundary', () => {
+		cacheService.set('boundary', 'cached', 200);
+
+		vi.advanceTimersByTime(200);
+
+		expect(cacheService.isExpired('boundary')).toBe(true);
+	});
+
+	it('should report a consistent countdown for custom TTLs and the expiry boundary', () => {
+		cacheService.set('countdown', 'cached', 3000);
+		vi.advanceTimersByTime(1000);
+
+		expect(cacheService.isCacheValid('countdown')).toBe(true);
+		expect(cacheService.getTimeUntilExpiration('countdown')).toBe(2000);
+		expect(cacheService.formatTimeUntilExpiration('countdown')).toBe('Expires in 2 seconds');
+		expect(cacheService.getTimeUntilExpiration('countdown', 0)).toBe(-1000);
+
+		vi.advanceTimersByTime(2000);
+
+		expect(cacheService.isExpired('countdown')).toBe(true);
+		expect(cacheService.getTimeUntilExpiration('countdown')).toBe(0);
+		expect(cacheService.formatTimeUntilExpiration('countdown')).toBe('Expired');
+	});
+
+	it('should treat zero TTL as immediately expired', async () => {
+		const fetchFn = vi.fn().mockResolvedValue('fresh');
+		cacheService.set('zero-ttl', 'cached', 0);
+
+		expect(await cacheService.getOrFetch('zero-ttl', fetchFn)).toBe('fresh');
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+	});
+
+	it('should restore custom TTLs and remain compatible with older stored entries', () => {
+		const timestamp = Date.now();
+		const storedEntries = JSON.stringify({
+			custom: { data: 'custom', timestamp: timestamp - 1500, isStale: false, ttl: 2000 },
+			legacy: { data: 'legacy', timestamp: timestamp - 500, isStale: false },
+			expired: { data: 'expired', timestamp: timestamp - 1500, isStale: false }
+		});
+		const storage = {
+			getItem: vi.fn((key: string) => (key === 'cointainr_cache' ? storedEntries : null)),
+			setItem: vi.fn(),
+			removeItem: vi.fn()
+		};
+		vi.stubGlobal('window', { localStorage: storage });
+		vi.stubGlobal('localStorage', storage);
+
+		const restoredCache = new CacheService(1000);
+
+		expect(restoredCache.get('custom')?.data).toBe('custom');
+		expect(restoredCache.get('legacy')?.data).toBe('legacy');
+		expect(restoredCache.has('expired')).toBe(false);
+		vi.advanceTimersByTime(500);
+		expect(restoredCache.isExpired('custom')).toBe(true);
+		expect(restoredCache.isExpired('legacy')).toBe(true);
+	});
+
+	it('should return expired data when refreshing fails', async () => {
+		cacheService.set('offline', 'cached');
+		vi.advanceTimersByTime(1500);
+		const fetchFn = vi.fn().mockRejectedValue(new Error('Offline'));
+
+		expect(await cacheService.getOrFetch('offline', fetchFn)).toBe('cached');
+		expect(fetchFn).toHaveBeenCalledTimes(1);
+		expect(cacheService.get('offline')?.isStale).toBe(true);
 	});
 
 	it('should return cached data when fetch fails', async () => {
