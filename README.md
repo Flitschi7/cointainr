@@ -27,8 +27,44 @@ commit/publication rules. Select the agents from `.github/agents/` in Copilot.
 
 Use the Node version in [frontend/.nvmrc](frontend/.nvmrc) for local frontend
 development; Docker and CI use the same major version. CI runs the frontend
-typecheck, unit tests, and build before image publication. Pull requests validate
-the image without publishing it.
+typecheck, unit tests, and build before image publication.
+
+### Build and Publication
+
+| Event | Automatic work |
+| --- | --- |
+| Push to `beta` | Frontend typecheck, unit tests, and build; no image publication |
+| PR targeting `main` or `beta` | Frontend checks plus an AMD64 image build; no publication |
+| Push to `main` | Frontend checks, AMD64/ARM64 image publication, and the existing release workflow |
+
+Newer beta-push and PR runs cancel superseded runs for the same event/ref.
+Release runs are not automatically cancelled. Docker jobs import and export
+layer caches, subject to GitHub's branch cache access rules. No path filters
+are used, so documentation-only changes still receive the frontend checks.
+
+To publish a beta image, open **Actions > Build and Push Docker Image > Run
+workflow**, select the `beta` branch, and enable `publish_beta`. This runs the
+checks before publishing AMD64/ARM64 images tagged `beta`, without creating a
+stable release. The manual trigger becomes available after this workflow
+definition has been merged into the default branch (`main`).
+
+For local validation without publishing:
+
+```bash
+cd frontend
+npm ci
+npm run check
+npm run test:unit
+cd ..
+docker build --tag cointainr:local .
+```
+
+The Docker build compiles the frontend itself and builds for the local engine's
+architecture; it does not verify the other architecture. The build context
+allows only the inputs used by the Dockerfile, excluding local databases,
+environment files, dependency trees, and prebuilt frontend output. No production
+Compose volumes are needed for a build. Local checks do not automatically
+suppress GitHub checks or cancel already-running workflows.
 
 ### 🌐 Try the Demo
 

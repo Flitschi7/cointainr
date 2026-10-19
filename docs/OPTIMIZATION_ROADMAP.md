@@ -1,7 +1,7 @@
 # Cointainr Optimization Roadmap
 
 Reviewed: 2026-10-19. This document retains the initial audit and records the
-first implementation pass below. Recheck remaining findings against current
+implementation passes below. Recheck remaining findings against current
 code before starting a ticket. No latency, memory, or accuracy gains have been
 measured yet; effort bands are planning estimates, not promises.
 
@@ -40,11 +40,41 @@ touched frontend files retain 10 pre-existing ESLint errors, down from 11 at
 the initial commit, with no new rule/message diagnostics. Repository-wide lint
 is not claimed to pass.
 
-Docker Desktop's Linux engine was unavailable, so image builds, container
-startup, and actual GitHub workflow execution remain unverified. Backend tests,
-E2E, provider calls, and performance benchmarks were not run. No databases or
-holdings were changed. Financial totals/cost-basis fixes remain the next
+Docker Desktop's Linux engine was unavailable during that first pass; local
+image and startup verification is recorded in the follow-up below. Actual
+GitHub workflow execution remains unverified. Backend tests, E2E, provider
+calls, and application performance benchmarks were not run. No user databases
+or holdings were changed. Financial totals/cost-basis fixes remain the next
 correctness priority; do not treat this pass as completing every audit item.
+
+### Build process follow-up
+
+- Beta pushes retain automatic frontend checks but no longer publish images.
+   A manual `workflow_dispatch` with `publish_beta: true` on `beta` publishes
+   AMD64/ARM64 beta images after successful checks. The trigger must first be
+   present on `main` to be available in GitHub's Actions interface.
+- PR image validation uses native AMD64 only, without QEMU or registry login.
+   Stable releases retain AMD64/ARM64 publication and existing version markers.
+- Superseded beta-push/PR runs are cancelled; main and manual publication runs
+   are not automatically cancelled. Jobs have explicit time limits. PR and
+   publication builds use the same image-cache scope with cache export enabled;
+   GitHub's branch access rules still apply.
+- The Docker context now allows only Dockerfile inputs, keeping local build
+   output, installed dependencies, environment files, private data directories,
+   and database files out of context. No persisted volume paths were changed.
+
+Validation: workflow YAML and seven publication scenarios pass local assertions,
+including PR permissions, cancellation conditions, cache configuration, and
+platform selection. The local Linux/AMD64 production image builds successfully.
+A repeat build reused all application layers and completed in 2.07 seconds on
+this machine; this is not a before/after GitHub cost benchmark. An ephemeral
+container with network access disabled, placeholder provider keys, and a tmpfs
+SQLite database passed real ASGI startup, health/HTML/compiled-asset HTTP checks,
+table initialization, and SQLite integrity checking. It was removed after the
+test, without mounting host data. ARM64 builds, remote cache reuse, registry
+publication, and actual GitHub workflow runs remain unverified in this pass.
+The clean Docker dependency installation also reported 41 npm audit findings
+(including 4 critical); they have not been triaged or automatically upgraded.
 
 ## Initial audit priorities and evidence
 
