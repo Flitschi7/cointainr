@@ -5,10 +5,6 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 
-	define: {
-		'process.env': process.env
-	},
-
 	// Development server configuration
 	server: {
 		port: 5173,
@@ -19,17 +15,6 @@ export default defineConfig({
 				target: 'http://127.0.0.1:8000',
 				changeOrigin: true,
 				secure: false
-			}
-		}
-	},
-
-	// Build configuration for consistent asset naming
-	build: {
-		rollupOptions: {
-			output: {
-				assetFileNames: '_app/immutable/assets/[name]-[hash][extname]',
-				chunkFileNames: '_app/immutable/chunks/[name]-[hash].js',
-				entryFileNames: '_app/immutable/entry/[name]-[hash].js'
 			}
 		}
 	}
