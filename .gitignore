@@ -46,7 +46,9 @@ instructions.instructions.md
 
 # Virtual Environment
 /backend/.venv/
-/docs
+/docs/*
+!/docs/agents/
+!/docs/OPTIMIZATION_ROADMAP.md
 # Cache and compiled files
 __pycache__/
 *.pyc
