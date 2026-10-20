@@ -1,7 +1,5 @@
 <script lang="ts">
-	import ValueCell from '$lib/components/ValueCell.svelte';
 	import CacheStatusIndicator from '$lib/components/CacheStatusIndicator.svelte';
-	import ProfitLossCell from '$lib/components/ProfitLossCell.svelte';
 	import CacheStatusBanner from '$lib/components/CacheStatusBanner.svelte';
 	import CurrencyRateDisplay from '$lib/components/CurrencyRateDisplay.svelte';
 	import AssetTypePieChart from '$lib/components/AssetTypePieChart.svelte';
@@ -18,7 +16,12 @@
 	import AddAssetForm from '$lib/components/AddAssetForm.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 	import { PriceManagementService } from '$lib/services/priceManagement';
-	import { PortfolioCalculationService } from '$lib/services/portfolioCalculations';
+	import {
+		PortfolioCalculationService,
+		sortValuedAssets,
+		type PortfolioSortField,
+		type PositionValuation
+	} from '$lib/services/portfolioCalculations';
 	import { onMount, onDestroy } from 'svelte';
 	import { formatCurrency, formatPercentage, formatNumber } from '$lib/utils/numberFormat';
 	import { debounce } from 'lodash-es';
@@ -29,7 +32,6 @@
 	// Conditional logging - only in development
 	const isDev = import.meta.env.DEV;
 	const log = isDev ? console.log : () => {};
-	const debug = isDev ? console.debug : () => {};
 
 	/** @type {import('./$types').PageData} */
 	export let data;
@@ -100,8 +102,15 @@
 			const assetId = parseInt(key, 10);
 			if (!isNaN(assetId) && value && typeof value === 'object') {
 				// Type check to ensure value has price and currency properties
-				const priceValue = 'price' in value ? (value.price as number) : 0;
-				const currencyValue = 'currency' in value ? (value.currency as string) : 'USD';
+				const priceValue = 'price' in value ? (value.price as number) : NaN;
+				const currencyValue = 'currency' in value ? (value.currency as string) : '';
+				if (
+					!Number.isFinite(priceValue) ||
+					priceValue < 0 ||
+					!currencyValue ||
+					('source' in value && value.source === 'error')
+				)
+					return;
 
 				assetPrices.set(assetId, {
 					price: priceValue,
@@ -149,22 +158,23 @@
 	let filterType: 'all' | 'cash' | 'stock' | 'crypto' | 'derivative' = 'all';
 
 	// Sorting state
-	type SortField =
-		| 'location'
-		| 'asset'
-		| 'type'
-		| 'currentPrice'
-		| 'value'
-		| 'quantity'
-		| 'purchasePrice'
-		| 'performance'
-		| 'yield';
+	type SortField = PortfolioSortField;
 	let sortField: SortField | null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
+	const sortColumns: { field: SortField; label: string; numeric: boolean }[] = [
+		{ field: 'location', label: 'Location/Broker', numeric: false },
+		{ field: 'type', label: 'Type', numeric: false },
+		{ field: 'asset', label: 'Asset', numeric: false },
+		{ field: 'quantity', label: 'Quantity', numeric: true },
+		{ field: 'purchasePrice', label: 'Purchase Price', numeric: true },
+		{ field: 'currentPrice', label: 'Current Price', numeric: true },
+		{ field: 'value', label: 'Value', numeric: true },
+		{ field: 'yield', label: 'Yield', numeric: true },
+		{ field: 'performance', label: 'Performance', numeric: true }
+	];
 
 	// Initialize services
 	const priceManagementService = new PriceManagementService();
-	let portfolioCalculationService: PortfolioCalculationService;
 
 	// Initialize the price management service with loaded prices
 	$: if (assetPrices.size > 0 && !priceManagementService.isPricesLoaded()) {
@@ -175,175 +185,8 @@
 		}
 	}
 
-	// Helper function to get current price for an asset
-	function getCurrentPrice(asset: Asset): number {
-		if (asset.type === 'cash') {
-			return 1; // Cash has no price, value is just quantity
-		}
-
-		// Get price from the price management service
-		const price = priceManagementService.getCurrentPrice(asset);
-
-		// Debug log removed for performance - only in dev mode if needed
-		isDev && debug(`Price for asset ${asset.id} (${asset.symbol}): ${price}`);
-
-		return price;
-	}
-
-	// Helper function to calculate current value (for sorting) - mirrors ValueCell logic
-	async function calculateCurrentValue(asset: Asset): Promise<number> {
-		if (asset.type === 'cash') {
-			return asset.quantity;
-		}
-
-		try {
-			const symbol = asset.symbol || '';
-			const currency = asset.buy_currency || asset.currency || 'USD';
-
-			if (!symbol) return 0;
-
-			// Use enhanced API with cache-first approach
-			const priceData = await enhancedApi.getPrice(symbol, asset.type, { forceRefresh: false });
-
-			if (!priceData || !priceData.price) return 0;
-
-			let price = priceData.price;
-			let priceCurrency = priceData.currency || 'USD';
-
-			// Convert to total currency if needed using cache-first approach
-			if (currency && currency !== priceCurrency) {
-				const conversionData = await enhancedApi.convertCurrency(priceCurrency, currency, price, {
-					forceRefresh: false
-				});
-				price = conversionData.converted;
-			}
-
-			return price * asset.quantity;
-		} catch (error) {
-			console.error(`Error calculating current value for ${asset.symbol}:`, error);
-			return 0;
-		}
-	}
-
-	// Helper function to calculate profit/loss (for sorting) - mirrors ProfitLossCell logic
-	async function calculateProfitLoss(asset: Asset): Promise<number> {
-		if (asset.type === 'cash' || !asset.purchase_price) {
-			return 0;
-		}
-
-		try {
-			const symbol = asset.symbol || '';
-			const currency = asset.buy_currency || asset.currency || 'USD';
-
-			if (!symbol) return 0;
-
-			// Use enhanced API with cache-first approach
-			const priceData = await enhancedApi.getPrice(symbol, asset.type, { forceRefresh: false });
-
-			if (!priceData || !priceData.price) return 0;
-
-			let currentPrice = priceData.price;
-			let priceCurrency = priceData.currency || 'USD';
-
-			// Convert to asset currency if needed using cache-first approach
-			if (currency && currency !== priceCurrency) {
-				const conversionData = await enhancedApi.convertCurrency(
-					priceCurrency,
-					currency,
-					currentPrice,
-					{ forceRefresh: false }
-				);
-				currentPrice = conversionData.converted;
-			}
-
-			const totalCurrentValue = currentPrice * asset.quantity;
-			const totalPurchaseValue = asset.purchase_price * asset.quantity;
-
-			return totalCurrentValue - totalPurchaseValue;
-		} catch (error) {
-			console.error(`Error calculating profit/loss for ${asset.symbol}:`, error);
-			return 0;
-		}
-	}
-
-	// Helper function to calculate performance percentage (for sorting) - mirrors ProfitLossCell logic
-	async function calculatePerformancePercentage(asset: Asset): Promise<number> {
-		if (asset.type === 'cash' || !asset.purchase_price) {
-			return 0;
-		}
-
-		try {
-			const symbol = asset.symbol || '';
-			const currency = asset.buy_currency || asset.currency || 'USD';
-
-			if (!symbol) return 0;
-
-			// Use enhanced API with cache-first approach
-			const priceData = await enhancedApi.getPrice(symbol, asset.type, { forceRefresh: false });
-
-			if (!priceData || !priceData.price) return 0;
-
-			let currentPrice = priceData.price;
-			let priceCurrency = priceData.currency || 'USD';
-
-			// Convert to asset currency if needed using cache-first approach
-			if (currency && currency !== priceCurrency) {
-				const conversionData = await enhancedApi.convertCurrency(
-					priceCurrency,
-					currency,
-					currentPrice,
-					{ forceRefresh: false }
-				);
-				currentPrice = conversionData.converted;
-			}
-
-			return ((currentPrice - asset.purchase_price) / asset.purchase_price) * 100;
-		} catch (error) {
-			console.error(`Error calculating performance for ${asset.symbol}:`, error);
-			return 0;
-		}
-	}
-
-	// Calculation cache to avoid repeated expensive operations
-	let calculationCache = new Map();
-	let lastDataHash = '';
-	let lastFilterHash = '';
-
-	// Cached calculated values to avoid repeated API calls during sorting
-	let calculatedValues: Map<number, { value: number; profitLoss: number; performance: number }> =
-		new Map();
-
-	// Check if recalculation is needed
-	function shouldRecalculate(currentData: any[], cacheKey: string) {
-		const currentHash = JSON.stringify(
-			currentData.map((a) => ({
-				id: a.id,
-				symbol: a.symbol,
-				quantity: a.quantity,
-				purchase_price: a.purchase_price
-			}))
-		);
-		if (lastDataHash !== currentHash) {
-			lastDataHash = currentHash;
-			calculationCache.clear();
-			return true;
-		}
-		return false;
-	}
-
-	// Debounced filter update function
 	const debouncedFilterUpdate = debounce(() => {
-		const currentFilterHash = JSON.stringify({ filterLocation, filterSymbol, filterType });
-		if (currentFilterHash !== lastFilterHash) {
-			lastFilterHash = currentFilterHash;
-			updateFilteredAndSortedAssets();
-		}
-	}, 300);
-
-	// Consolidated function to update filtered and sorted assets
-	async function updateFilteredAndSortedAssets() {
-		// Filter assets
-		const newFilteredAssets = allAssets.filter((asset) => {
+		filteredAssets = allAssets.filter((asset) => {
 			const locationMatch =
 				!filterLocation || asset.name.toLowerCase().includes(filterLocation.toLowerCase());
 			const symbolMatch =
@@ -352,138 +195,7 @@
 			const typeMatch = filterType === 'all' || asset.type === filterType;
 			return locationMatch && symbolMatch && typeMatch;
 		});
-
-		filteredAssets = newFilteredAssets;
-
-		// Sort assets if needed
-		if (shouldRecalculate(newFilteredAssets, 'sort') || sortField || sortDirection) {
-			void (isDev && log('Updating sorted assets due to data change'));
-			sortedAssets = await sortAssets(newFilteredAssets, sortField, sortDirection);
-
-			// Update totals only when data actually changes
-			if (sortedAssets.length > 0 && pricesLoaded) {
-				await updateTotals();
-			}
-		}
-	}
-
-	// Function to calculate all values for sorting
-	async function calculateAllValuesForSorting(assets: Asset[]): Promise<void> {
-		void (isDev && log('Calculating all values for sorting...'));
-
-		const calculations = assets.map(async (asset) => {
-			// Check cache first
-			const cacheKey = `${asset.id}-${asset.quantity}-${asset.purchase_price}`;
-			if (calculationCache.has(cacheKey)) {
-				calculatedValues.set(asset.id, calculationCache.get(cacheKey));
-				return;
-			}
-
-			if (asset.type === 'cash') {
-				const values = {
-					value: asset.quantity,
-					profitLoss: 0,
-					performance: 0
-				};
-				calculatedValues.set(asset.id, values);
-				calculationCache.set(cacheKey, values);
-				return;
-			}
-
-			try {
-				const [value, profitLoss, performance] = await Promise.all([
-					calculateCurrentValue(asset),
-					calculateProfitLoss(asset),
-					calculatePerformancePercentage(asset)
-				]);
-
-				const values = { value, profitLoss, performance };
-				calculatedValues.set(asset.id, values);
-				calculationCache.set(cacheKey, values);
-			} catch (error) {
-				console.error(`Error calculating values for ${asset.symbol}:`, error);
-				const fallbackValues = { value: 0, profitLoss: 0, performance: 0 };
-				calculatedValues.set(asset.id, fallbackValues);
-				calculationCache.set(cacheKey, fallbackValues);
-			}
-		});
-
-		await Promise.all(calculations);
-		void (isDev && log('All values calculated for sorting'));
-	}
-
-	// Sort function
-	async function sortAssets(
-		assets: Asset[],
-		field: SortField | null,
-		direction: 'asc' | 'desc'
-	): Promise<Asset[]> {
-		if (!field) return assets;
-
-		// Calculate all values for sorting
-		await calculateAllValuesForSorting(assets);
-
-		return [...assets].sort((a, b) => {
-			let aVal: any;
-			let bVal: any;
-
-			switch (field) {
-				case 'location':
-					aVal = a.name || '';
-					bVal = b.name || '';
-					break;
-				case 'asset':
-					aVal = a.assetname || a.symbol || '';
-					bVal = b.assetname || b.symbol || '';
-					break;
-				case 'type':
-					aVal = a.type || '';
-					bVal = b.type || '';
-					break;
-				case 'currentPrice':
-					aVal = getCurrentPrice(a);
-					bVal = getCurrentPrice(b);
-					break;
-				case 'value':
-					aVal = calculatedValues.get(a.id)?.value || 0;
-					bVal = calculatedValues.get(b.id)?.value || 0;
-					break;
-				case 'quantity':
-					aVal = a.quantity || 0;
-					bVal = b.quantity || 0;
-					break;
-				case 'purchasePrice':
-					aVal = a.purchase_price || 0;
-					bVal = b.purchase_price || 0;
-					break;
-				case 'performance':
-					aVal = calculatedValues.get(a.id)?.performance || 0;
-					bVal = calculatedValues.get(b.id)?.performance || 0;
-					// Handle cases where one or both assets have no performance data
-					if (isNaN(aVal)) aVal = 0;
-					if (isNaN(bVal)) bVal = 0;
-					break;
-				case 'yield':
-					aVal = calculatedValues.get(a.id)?.profitLoss || 0;
-					bVal = calculatedValues.get(b.id)?.profitLoss || 0;
-					break;
-				default:
-					return 0;
-			}
-
-			// Handle string comparison
-			if (typeof aVal === 'string' && typeof bVal === 'string') {
-				return direction === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-			}
-
-			// Handle numeric comparison
-			if (direction === 'asc') {
-				return aVal - bVal;
-			} else {
-				return bVal - aVal;
-			}
-		});
-	}
+	}, 300);
 
 	// Function to fetch all current prices for sorting and aggregation
 	async function fetchAllCurrentPrices(forceRefresh = false) {
@@ -505,9 +217,6 @@
 			assetPrices = pricesMap;
 			pricesLoaded = true;
 
-			// Initialize the portfolio calculation service with the updated prices
-			portfolioCalculationService = new PortfolioCalculationService(assetPrices);
-
 			void (isDev && log('Updated assetPrices Map:', Array.from(assetPrices.entries())));
 			void (isDev && log('=== fetchAllCurrentPrices END ==='));
 		} catch (error) {
@@ -525,11 +234,6 @@
 			if (assetPrices.size > 0) {
 				console.warn(`Using existing cached prices due to ${errorSource}: ${errorMessage}`);
 				pricesLoaded = true;
-
-				// Initialize portfolio calculation service with existing prices
-				if (!portfolioCalculationService) {
-					portfolioCalculationService = new PortfolioCalculationService(assetPrices);
-				}
 			} else {
 				// No prices available, show a warning
 				console.warn(`No prices available due to ${errorSource}: ${errorMessage}`);
@@ -543,7 +247,7 @@
 	// Reactive statement for filter changes - debounced
 	$: {
 		// Trigger debounced update when filters change
-		(filterLocation, filterSymbol, filterType);
+		(filterLocation, filterSymbol, filterType, allAssets);
 		debouncedFilterUpdate();
 	}
 
@@ -559,170 +263,53 @@
 			sortField = field;
 			sortDirection = 'asc';
 		}
-
-		// Immediate update for sorting (not debounced)
-		updateFilteredAndSortedAssets();
 	}
 
-	// Reactive totals that update when pricesLoaded or totalCurrency changes
-	let totalValue = 0;
-	let totalYield = 0;
-	let totalPerformance = 0;
-
-	// Prevent duplicate calculations
+	let totalValue: number | null = null;
+	let totalYield: number | null = null;
+	let totalPerformance: number | null = null;
 	let isCalculatingTotals = false;
+	let totalsRevision = 0;
+	let positionValuations = new Map<number, PositionValuation>();
 
-	// Function to update all totals with caching
-	async function updateTotals() {
-		if (!sortedAssets.length || !pricesLoaded || isCalculatingTotals) return;
-
-		isCalculatingTotals = true;
-
-		// Check if totals need recalculation
-		const totalsKey = `totals-${totalCurrency}-${sortedAssets.length}`;
-		const assetsHash = JSON.stringify(
-			sortedAssets.map((a) => ({
-				id: a.id,
-				quantity: a.quantity,
-				purchase_price: a.purchase_price
-			}))
-		);
-
-		if (calculationCache.has(totalsKey) && calculationCache.get(totalsKey).hash === assetsHash) {
-			const cached = calculationCache.get(totalsKey);
-			totalValue = cached.totalValue;
-			totalYield = cached.totalYield;
-			totalPerformance = cached.totalPerformance;
-			isDev && log('Using cached totals');
-			isCalculatingTotals = false;
-			return;
-		}
-
-		isDev && log('Calculating totals directly from visible assets');
-
+	async function updateValuation(
+		assets: Asset[],
+		currency: string,
+		prices: Map<number, { price: number; currency: string }>,
+		ready: boolean
+	) {
+		const revision = ++totalsRevision;
+		totalValue = null;
+		totalYield = null;
+		totalPerformance = null;
+		positionValuations = new Map();
+		isCalculatingTotals = assets.length > 0;
+		if (!ready) return;
+		const calculator = new PortfolioCalculationService(new Map(prices));
 		try {
-			let sumValue = 0;
-			let sumInvestment = 0;
-			let sumYield = 0;
-
-			// Process each asset and convert to total currency
-			for (const asset of sortedAssets) {
-				// Handle cash assets
-				if (asset.type === 'cash') {
-					let cashValue = asset.quantity || 0;
-					const assetCurrency = asset.currency || 'USD';
-
-					// Convert cash to total currency if needed
-					if (assetCurrency !== totalCurrency) {
-						try {
-							const conversionData = await enhancedApi.convertCurrency(
-								assetCurrency,
-								totalCurrency,
-								cashValue,
-								{ forceRefresh: false }
-							);
-							cashValue = conversionData.converted;
-						} catch (error) {
-							console.error(`Failed to convert ${assetCurrency} to ${totalCurrency}:`, error);
-						}
-					}
-
-					sumValue += cashValue;
-					continue;
-				}
-
-				// Handle stock, crypto, and derivative assets
-				if (asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative') {
-					const currentPrice = getCurrentPrice(asset);
-					const quantity = asset.quantity || 0;
-					let currentValue = currentPrice * quantity;
-
-					// Get the price currency from the price data
-					const priceMap = priceManagementService.getPriceMap();
-					const priceData = priceMap.get(asset.id);
-					const priceCurrency = priceData?.currency || 'USD';
-
-					// Convert the total value to target currency if needed
-					if (priceCurrency !== totalCurrency) {
-						try {
-							const conversionData = await enhancedApi.convertCurrency(
-								priceCurrency,
-								totalCurrency,
-								currentValue,
-								{ forceRefresh: false }
-							);
-							currentValue = conversionData.converted;
-						} catch (error) {
-							console.error(`Failed to convert ${priceCurrency} to ${totalCurrency}:`, error);
-						}
-					}
-
-					sumValue += currentValue;
-
-					// Calculate yield if purchase price is available
-					if (asset.purchase_price && asset.purchase_price > 0) {
-						let purchaseValue = asset.purchase_price * quantity;
-						const purchaseCurrency = asset.buy_currency || asset.currency || 'USD';
-
-						if (purchaseCurrency !== totalCurrency) {
-							try {
-								const conversionData = await enhancedApi.convertCurrency(
-									purchaseCurrency,
-									totalCurrency,
-									purchaseValue,
-									{ forceRefresh: false }
-								);
-								purchaseValue = conversionData.converted;
-							} catch (error) {
-								console.error(
-									`Failed to convert purchase value from ${purchaseCurrency} to ${totalCurrency}:`,
-									error
-								);
-							}
-						}
-
-						const assetYield = currentValue - purchaseValue;
-						sumYield += assetYield;
-						sumInvestment += purchaseValue;
-					}
-				}
-			}
-
-			// Set the calculated totals
-			totalValue = sumValue;
-			totalYield = sumYield;
-			totalPerformance = sumInvestment > 0 ? (sumYield / sumInvestment) * 100 : 0;
-
-			// Cache the results
-			calculationCache.set(totalsKey, {
-				hash: assetsHash,
-				totalValue,
-				totalYield,
-				totalPerformance
-			});
-
-			isDev &&
-				log('Calculated totals:', {
-					totalValue,
-					totalYield,
-					totalPerformance,
-					currency: totalCurrency
-				});
+			const valuation = await calculator.calculatePortfolioValuation(
+				assets.map((asset) => ({ ...asset })),
+				currency
+			);
+			if (revision !== totalsRevision) return;
+			positionValuations = valuation.positions;
+			totalValue = valuation.totals.totalValue;
+			totalYield = valuation.totals.totalYield;
+			totalPerformance = valuation.totals.totalPerformance;
 		} catch (error) {
+			if (revision !== totalsRevision) return;
 			console.error('Error calculating totals:', error);
-			totalValue = 0;
-			totalYield = 0;
-			totalPerformance = 0;
 		} finally {
-			isCalculatingTotals = false;
+			if (revision === totalsRevision) isCalculatingTotals = false;
 		}
 	}
 
-	// Single consolidated reactive statement for totals
-	$: {
-		if (pricesLoaded && totalCurrency && sortedAssets && sortedAssets.length > 0) {
-			updateTotals();
-		}
+	$: updateValuation(filteredAssets, totalCurrency, assetPrices, pricesLoaded);
+	$: sortedAssets = sortValuedAssets(filteredAssets, positionValuations, sortField, sortDirection);
+
+	function formatValuation(value: number | null | undefined, percentage = false): string {
+		if (value == null) return isCalculatingTotals ? '...' : 'Unavailable';
+		return percentage ? formatPercentage(value) : formatCurrency(value, totalCurrency);
 	}
 
 	function openAddModal() {
@@ -790,9 +377,6 @@
 			isDev && log('Fetching all prices on page load with cache-first approach');
 			// Don't force refresh, use cache-first approach
 			await fetchAllCurrentPrices(false);
-
-			// Update totals after prices are loaded
-			await updateTotals();
 		}
 
 		// Set up the adaptive cache polling
@@ -803,6 +387,8 @@
 	});
 
 	onDestroy(() => {
+		totalsRevision += 1;
+		debouncedFilterUpdate.cancel();
 		if (cacheStatusInterval) {
 			clearInterval(cacheStatusInterval);
 		}
@@ -959,17 +545,17 @@
 					type="text"
 					bind:value={filterLocation}
 					placeholder="Filter by location or broker..."
-					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-1 sm:w-auto"
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:ring-1 focus:outline-none sm:w-auto"
 				/>
 				<input
 					type="text"
 					bind:value={filterSymbol}
 					placeholder="Filter by symbol or ISIN..."
-					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:outline-none focus:ring-1 sm:w-auto"
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:ring-1 focus:outline-none sm:w-auto"
 				/>
 				<select
 					bind:value={filterType}
-					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-1 sm:w-auto"
+					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm focus:ring-1 focus:outline-none sm:w-auto"
 				>
 					<option value="all">All asset types</option>
 					<option value="cash">Cash</option>
@@ -978,13 +564,13 @@
 					<option value="derivative">Derivatives</option>
 				</select>
 				<div class="flex items-center gap-3 border-l border-gray-600 pl-4">
-					<label for="totalCurrency" class="text-text-light whitespace-nowrap text-sm font-medium">
+					<label for="totalCurrency" class="text-text-light text-sm font-medium whitespace-nowrap">
 						Display currency:
 					</label>
 					<select
 						id="totalCurrency"
 						bind:value={totalCurrency}
-						class="bg-surface text-text-light focus:border-primary focus:ring-primary rounded-lg border border-gray-600 px-3 py-2 text-sm focus:outline-none focus:ring-1"
+						class="bg-surface text-text-light focus:border-primary focus:ring-primary rounded-lg border border-gray-600 px-3 py-2 text-sm focus:ring-1 focus:outline-none"
 					>
 						<option value="EUR">EUR (€)</option>
 						<option value="USD">USD ($)</option>
@@ -999,7 +585,7 @@
 				<button
 					on:click={handleRefreshAllPrices}
 					disabled={isRefreshing}
-					class="bg-primary focus:ring-primary flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-opacity-90 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+					class="bg-primary focus:ring-primary hover:bg-opacity-90 focus:ring-opacity-50 flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:shadow-lg focus:ring-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
 					title="Force refresh all prices (bypass cache)"
 					aria-label="Force refresh all prices"
 				>
@@ -1021,7 +607,7 @@
 				</button>
 				<button
 					on:click={openAddModal}
-					class="bg-gold focus:ring-gold flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:bg-opacity-90 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-opacity-50 sm:w-auto"
+					class="bg-gold focus:ring-gold hover:bg-opacity-90 focus:ring-opacity-50 flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 font-semibold text-white transition-all duration-200 hover:shadow-lg focus:ring-2 focus:outline-none sm:w-auto"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"
@@ -1052,151 +638,43 @@
 					>
 						<thead>
 							<tr class="bg-background border-b-2 border-gray-600">
-								<th
-									class="hover:bg-surface col-span-2 cursor-pointer border-r border-gray-600 px-2 py-2 text-left font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('location')}
-								>
-									<div class="flex items-center justify-between">
-										Location/Broker
-										{#if sortField === 'location'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
+								{#each sortColumns as column (column.field)}
+									<th
+										class="hover:bg-surface border-r border-gray-600 px-2 py-2 font-bold transition-colors sm:px-4 sm:py-3"
+										aria-sort={sortField === column.field
+											? sortDirection === 'asc'
+												? 'ascending'
+												: 'descending'
+											: undefined}
+									>
+										<button
+											type="button"
+											class="focus-visible:ring-primary flex w-full cursor-pointer items-center gap-2 rounded-sm focus-visible:ring-2 focus-visible:outline-none"
+											class:justify-end={column.numeric}
+											class:justify-between={!column.numeric}
+											on:click={() => handleSort(column.field)}
+										>
+											{column.label}
+											<span
+												aria-hidden="true"
+												class={sortField === column.field ? 'text-primary' : 'text-gray-500'}
+											>
+												{sortField === column.field ? (sortDirection === 'asc' ? '↑' : '↓') : '↕'}
 											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-left font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('type')}
-								>
-									<div class="flex items-center justify-between">
-										Type
-										{#if sortField === 'type'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-left font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('asset')}
-								>
-									<div class="flex items-center justify-between">
-										Asset
-										{#if sortField === 'asset'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('quantity')}
-								>
-									<div class="flex items-center justify-end">
-										Quantity
-										{#if sortField === 'quantity'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('purchasePrice')}
-								>
-									<div class="flex items-center justify-end">
-										Purchase Price
-										{#if sortField === 'purchasePrice'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('currentPrice')}
-								>
-									<div class="flex items-center justify-end">
-										Current Price
-										{#if sortField === 'currentPrice'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('value')}
-								>
-									<div class="flex items-center justify-end">
-										Value
-										{#if sortField === 'value'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('yield')}
-								>
-									<div class="flex items-center justify-end">
-										Yield
-										{#if sortField === 'yield'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
-								<th
-									class="hover:bg-surface cursor-pointer border-r border-gray-600 px-2 py-2 text-right font-bold transition-colors sm:px-4 sm:py-3"
-									on:click={() => handleSort('performance')}
-								>
-									<div class="flex items-center justify-end">
-										Performance
-										{#if sortField === 'performance'}
-											<span class="text-primary ml-2">
-												{sortDirection === 'asc' ? '↑' : '↓'}
-											</span>
-										{:else}
-											<span class="ml-2 text-gray-500">↕</span>
-										{/if}
-									</div>
-								</th>
+										</button>
+									</th>
+								{/each}
 								<th class="px-2 py-2 text-center font-bold sm:px-4 sm:py-3">Status</th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each sortedAssets as asset (asset.id)}
+								{@const valuation = positionValuations.get(asset.id)}
 								<tr
 									tabindex="0"
 									on:click={() => openEditModal(asset)}
 									on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && openEditModal(asset)}
-									class="hover:bg-background focus:ring-primary cursor-pointer border-b border-gray-600 transition-all duration-200 hover:shadow-sm focus:outline-none focus:ring-2"
+									class="hover:bg-background focus:ring-primary cursor-pointer border-b border-gray-600 transition-all duration-200 hover:shadow-sm focus:ring-2 focus:outline-none"
 									aria-label={`Edit asset ${asset.name}`}
 								>
 									<!-- 1. Location/Broker -->
@@ -1225,13 +703,17 @@
 
 									<!-- 5. Purchase Price -->
 									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
-										{#if asset.purchase_price}
-											{formatCurrency(
-												asset.purchase_price,
-												asset.buy_currency ?? asset.currency ?? ''
-											)}
-										{:else}
+										{#if asset.type === 'cash'}
 											-
+										{:else}
+											<span
+												title={asset.purchase_price !== null &&
+												(asset.buy_currency || asset.currency)
+													? `Original: ${formatCurrency(asset.purchase_price, asset.buy_currency || asset.currency || '')}`
+													: undefined}
+											>
+												{formatValuation(valuation?.purchasePrice)}
+											</span>
 										{/if}
 									</td>
 
@@ -1239,55 +721,30 @@
 									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
 										{#if asset.type === 'cash'}
 											-
-										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
-											<ValueCell
-												symbol={asset.symbol ?? ''}
-												quantity={1}
-												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-												assetType={asset.type}
-												{refreshTrigger}
-												showCacheStatus={false}
-											/>
 										{:else}
-											-
+											{formatValuation(valuation?.currentPrice)}
 										{/if}
 									</td>
 
 									<!-- 7. Value -->
 									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
-										{#if asset.type === 'cash'}
-											{formatCurrency(asset.quantity, asset.currency ?? 'EUR')}
-										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
-											<ValueCell
-												symbol={asset.symbol ?? ''}
-												quantity={asset.quantity}
-												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-												assetType={asset.type}
-												{refreshTrigger}
-												showCacheStatus={false}
-											/>
-										{:else}
-											-
-										{/if}
+										{formatValuation(valuation?.value)}
 									</td>
 
 									<!-- 8. Yield -->
 									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
 										{#if asset.type === 'cash'}
 											-
-										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
-											<ProfitLossCell
-												symbol={asset.symbol ?? ''}
-												quantity={asset.quantity}
-												purchasePrice={asset.purchase_price}
-												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-												assetType={asset.type}
-												{refreshTrigger}
-												displayType="absolute"
-												showCacheStatus={false}
-											/>
 										{:else}
-											-
+											<span
+												class={valuation?.yield == null
+													? 'text-text-light'
+													: valuation.yield >= 0
+														? 'text-profit'
+														: 'text-loss'}
+											>
+												{formatValuation(valuation?.yield)}
+											</span>
 										{/if}
 									</td>
 
@@ -1295,19 +752,16 @@
 									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
 										{#if asset.type === 'cash'}
 											-
-										{:else if asset.type === 'stock' || asset.type === 'crypto' || asset.type === 'derivative'}
-											<ProfitLossCell
-												symbol={asset.symbol ?? ''}
-												quantity={asset.quantity}
-												purchasePrice={asset.purchase_price}
-												currency={asset.buy_currency ?? asset.currency ?? 'USD'}
-												assetType={asset.type}
-												{refreshTrigger}
-												displayType="percentage"
-												showCacheStatus={false}
-											/>
 										{:else}
-											-
+											<span
+												class={valuation?.performance == null
+													? 'text-text-light'
+													: valuation.performance >= 0
+														? 'text-profit'
+														: 'text-loss'}
+											>
+												{formatValuation(valuation?.performance, true)}
+											</span>
 										{/if}
 									</td>
 
@@ -1352,24 +806,52 @@
 								<td
 									class="text-gold border-r border-gray-600 px-4 py-3 text-right text-lg font-bold"
 								>
-									{formatCurrency(totalValue, totalCurrency)}
+									{#if totalValue === null}
+										<span
+											class="text-text-light"
+											title="A quote or currency conversion is unavailable."
+											>{isCalculatingTotals ? '...' : 'Unavailable'}</span
+										>
+									{:else}
+										{formatCurrency(totalValue, totalCurrency)}
+									{/if}
 								</td>
 								<!-- 8. Yield -->
 								<td class="border-r border-gray-600 px-4 py-3 text-right">
-									<span class={totalYield >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}>
-										{formatCurrency(totalYield, totalCurrency)}
-									</span>
+									{#if totalYield === null}
+										<span title="Quote, purchase cost, or currency conversion unavailable."
+											>{isCalculatingTotals ? '...' : 'Unavailable'}</span
+										>
+									{:else}
+										<span class={totalYield >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}
+											>{formatCurrency(totalYield, totalCurrency)}</span
+										>
+									{/if}
 								</td>
 								<!-- 9. Performance -->
 								<td class="border-r border-gray-600 px-4 py-3 text-right">
-									<span
-										class={totalPerformance >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}
-									>
-										{formatPercentage(totalPerformance)}
-									</span>
+									{#if totalPerformance === null}
+										<span title="Return requires complete values and a nonzero cost basis."
+											>{isCalculatingTotals ? '...' : 'Unavailable'}</span
+										>
+									{:else}
+										<span
+											class={totalPerformance >= 0
+												? 'text-profit font-bold'
+												: 'text-loss font-bold'}>{formatPercentage(totalPerformance)}</span
+										>
+									{/if}
 								</td>
 								<!-- 10. Status -->
-								<td class="px-4 py-3 text-center">-</td>
+								<td class="px-4 py-3 text-center"
+									><span role="status"
+										>{isCalculatingTotals
+											? 'Calculating...'
+											: totalValue === null || totalYield === null || totalPerformance === null
+												? 'Incomplete'
+												: '-'}</span
+									></td
+								>
 							</tr>
 						</tfoot>
 					</table>

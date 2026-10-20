@@ -1,6 +1,6 @@
 # Cointainr Optimization Roadmap
 
-Reviewed: 2026-10-19. This document retains the initial audit and records the
+Reviewed: 2026-10-20. This document retains the initial audit and records the
 implementation passes below. Recheck remaining findings against current
 code before starting a ticket. No latency, memory, or accuracy gains have been
 measured yet; effort bands are planning estimates, not promises.
@@ -112,6 +112,106 @@ navigation, and opening/switching/closing the asset form, without horizontal
 page overflow or uncaught JavaScript errors. No real holdings or providers
 were used; full authenticated CRUD E2E, ARM64, and GitHub execution remain
 unverified. Repository-wide lint is not claimed to pass.
+
+### Portfolio totals correctness follow-up
+
+- The active dashboard had its own totals loop; the previously audited
+  calculator was instantiated but did not supply the visible totals. The
+  dashboard now uses the tested
+  [portfolio calculator](../frontend/src/lib/services/portfolioCalculations.ts).
+  Its old totals cache and duplicate arithmetic were removed; sorting still
+  has separate calculations and caching.
+- Quote value and purchase cost are converted independently before subtraction.
+  Purchase cost uses `buy_currency`, falling back only to an explicit asset
+  currency. Missing currencies are not guessed, and failed conversions never
+  add foreign amounts to target-currency totals.
+- Value, yield, and performance are independently nullable. Missing quotes,
+  unavailable costs, invalid FX responses, and numeric overflow produce
+  `Unavailable` with an `Incomplete` status instead of invented numbers. Known
+  zero quotes and zero purchase costs remain distinct from missing data; a
+  zero investment basis has no defined percentage return.
+- Quote loading no longer turns failures into a synthetic zero-dollar quote.
+  The totals path uses the existing cached converter without forcing a provider
+  refresh, retains usable stale FX on network failure, and rejects malformed
+  conversion metadata. The batch API contract is unchanged.
+- Each totals request snapshots assets and quotes. A revision check prevents
+  older async results from replacing a newer currency/filter selection; pending
+  totals are cleared so an old amount is not relabeled with the new currency.
+
+Validation: 21 new public-service regressions use real FX/cache code with mocked
+HTTP, bringing the unit suite to **59 passing tests across 3 suites**. Svelte
+check reports zero errors and warnings; the production build and touched-file
+formatting pass. Scoped ESLint comparison adds no diagnostics to the existing
+baseline; repository-wide lint is not claimed to pass. Synthetic browser checks
+at 1440px and 390px cover the worked currency example, filters, currency
+switches, an obsolete delayed response, missing quotes, failed FX, and a usable
+market value with unavailable purchase FX. No uncaught JavaScript errors or
+horizontal page overflow were observed; the existing table remains scrollable.
+
+No real holdings, credentials, databases, or providers were used. No backend,
+storage, dependency, or rounding-policy changes were made. Individual row,
+sorting, and chart calculations remain separate; full financial coverage,
+authenticated CRUD E2E, and backend validation are not claimed by this pass.
+
+### Shared position valuation and sorting follow-up
+
+- Dashboard rows, financial sorting, and totals now consume one converted
+  position snapshot from the existing portfolio calculator. This supersedes
+  the earlier note about separate row/sorting arithmetic; charts remain
+  independent and unchanged.
+- Value, current unit price, purchase unit price, yield, and performance use
+  the selected display currency. The original purchase amount and currency
+  remain in the purchase-price tooltip and are not changed in storage.
+- Removed the old sort cache and its incomplete invalidation keys. Sorting
+  uses already-calculated values without fetching quotes or FX. Unavailable
+  and inapplicable values sort last in both directions; zero and negative
+  amounts remain real values. Aggregate returns retain investment weighting
+  rather than averaging position percentages.
+- Currency, filter, and quote changes replace both row and total snapshots.
+  The revision guard rejects obsolete results, pending rows do not relabel old
+  amounts, and teardown cancels the filter debounce and invalidates pending
+  valuation results. Manual refresh and cache-status components are retained.
+- Sort headers use native buttons with keyboard activation and `aria-sort`.
+  Existing table layout, profit/loss styling, and mobile scrolling are retained.
+
+Validation: 13 additional regressions bring financial/service sorting coverage
+to **34 tests** and the full unit suite to **72 passing tests across 3 suites**.
+Typecheck reports zero errors and warnings; formatting and production build
+pass, with no new scoped ESLint diagnostics against the existing baseline.
+Synthetic desktop (1440px) and mobile (390px) browser checks cover mixed
+currencies, missing quotes/costs, a true zero quote, keyboard sorting in both
+directions, filters, display-currency changes, original-cost tooltips, rejection
+of a delayed CHF response, and manual refresh changing the active sort order.
+The checked ascending/descending sort actions made zero additional quote/FX
+HTTP requests; this is not a provider-load or application-wide benchmark.
+No uncaught JavaScript errors or horizontal page overflow were observed.
+
+No real holdings, providers, or databases were used. No backend, dependency,
+storage, or rounding-policy changes were made; full authenticated CRUD E2E
+and chart valuation correctness are not claimed. Standalone cell components
+were retained rather than removed as an unrelated cleanup.
+
+### Pre-publication financial review
+
+- Quote loading now rejects superseded requests at the price-management owner,
+  preventing an older load from replacing a completed forced refresh.
+- Failed quote reloads retain validated prior quotes for requested assets,
+  including true zero quotes; assets without usable prior data remain unavailable.
+- FX validation also checks the backend's unrounded `amount * rate` contract
+  with floating-point tolerance. Inconsistent results are unavailable, while
+  valid negative cash conversions remain supported.
+
+Seven additional HTTP-only regressions cover these review findings, bringing
+the financial suite to **41 tests** and the full suite to **79 passing tests
+across 3 suites**. The race, offline fallback, and malformed arithmetic cases
+were observed failing before their fixes and passing afterward. Formatting,
+typecheck (zero errors/warnings), production build, and baseline-relative
+scoped ESLint checks pass.
+
+The final production Docker image builds successfully. An isolated smoke test
+with network disabled and a temporary tmpfs database passes application startup,
+health, HTML, 20 referenced build assets, schema creation, and SQLite integrity.
+No host database was mounted and no image was published.
 
 ## Initial audit priorities and evidence
 
