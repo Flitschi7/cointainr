@@ -47,6 +47,7 @@ docker-compose-test.yml
 /backend/.venv/
 /docs/*
 !/docs/agents/
+!/docs/adr/
 !/docs/OPTIMIZATION_ROADMAP.md
 # Cache and compiled files
 __pycache__/

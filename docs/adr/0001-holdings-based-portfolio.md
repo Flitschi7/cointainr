@@ -1,0 +1,3 @@
+# Holdings-based portfolio, no transaction history
+
+Cointainr records each holding's current quantity and average purchase price directly, rather than deriving holdings from a history of buys and sells. Selling means lowering the quantity; there are no realized gains or tax reports. We chose this because it matches how the app is used (one person keeping a current picture of their portfolio) and keeps the data model small, while a transaction ledger would be the largest possible change to storage, entry, and valuation. Revisit only if realized gains or tax reporting become requirements; moving later means reconstructing histories for existing holdings.

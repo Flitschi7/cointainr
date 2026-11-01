@@ -37,16 +37,21 @@ typecheck, unit tests, and build before image publication.
 | PR targeting `main` or `beta` | Frontend checks plus an AMD64 image build; no publication                         |
 | Push to `main`                | Frontend checks, AMD64/ARM64 image publication, and the existing release workflow |
 
-Newer beta-push and PR runs cancel superseded runs for the same event/ref.
-Release runs are not automatically cancelled. Docker jobs import and export
-layer caches, subject to GitHub's branch cache access rules. No path filters
-are used, so documentation-only changes still receive the frontend checks.
+Features and risky changes reach `main` through pull requests; small, low-risk
+changes may be pushed to `main` directly. The `beta` branch is not part of the
+regular flow.
 
-To publish a beta image, open **Actions > Build and Push Docker Image > Run
-workflow**, select the `beta` branch, and enable `publish_beta`. This runs the
-checks before publishing AMD64/ARM64 images tagged `beta`, without creating a
-stable release. The manual trigger becomes available after this workflow
-definition has been merged into the default branch (`main`).
+Newer beta-push and PR runs cancel superseded runs for the same event/ref.
+Release runs are not automatically cancelled. Release builds import and export
+layer caches; PR validation only reads them, because GitHub scopes PR caches to
+the PR. No path filters are used, so documentation-only changes still receive
+the frontend checks.
+
+To publish an optional beta image, open
+**Actions > Build and Push Docker Image > Run workflow**, select the `beta`
+branch, and enable `publish_beta`. This runs the checks before publishing
+AMD64/ARM64 images tagged `beta`, without creating a stable release. Selecting
+another branch publishes nothing and leaves a warning.
 
 For local validation without publishing:
 

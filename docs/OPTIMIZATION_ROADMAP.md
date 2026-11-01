@@ -1,9 +1,13 @@
 # Cointainr Optimization Roadmap
 
-Reviewed: 2026-10-20. This document retains the initial audit and records the
-implementation passes below. Recheck remaining findings against current
-code before starting a ticket. No latency, memory, or accuracy gains have been
-measured yet; effort bands are planning estimates, not promises.
+Reviewed: 2026-11-01. This document retains the initial audit and records the
+implementation passes below. The current plan is the
+[app optimization spec](../.scratch/app-optimization/spec.md); see
+[Current plan](#current-plan) for its order and for dropped audit items.
+Vocabulary follows the [glossary](../GLOSSARY.md); hard-to-reverse decisions
+are in [ADRs](adr/). Recheck remaining findings against current code before
+starting a ticket. No latency, memory, or accuracy gains have been measured
+yet.
 
 ## Implementation status
 
@@ -189,7 +193,7 @@ No uncaught JavaScript errors or horizontal page overflow were observed.
 No real holdings, providers, or databases were used. No backend, dependency,
 storage, or rounding-policy changes were made; full authenticated CRUD E2E
 and chart valuation correctness are not claimed. Standalone cell components
-were retained rather than removed as an unrelated cleanup.
+were retained at the time; they were removed later as unused (see below).
 
 ### Pre-publication financial review
 
@@ -213,7 +217,29 @@ with network disabled and a temporary tmpfs database passes application startup,
 health, HTML, 20 referenced build assets, schema creation, and SQLite integrity.
 No host database was mounted and no image was published.
 
+### Review follow-up (PRs 8–14)
+
+- A retained offline quote is used only while the holding keeps the symbol and
+  asset type it was loaded for. Superseded quote loads resolve to nothing, and
+  cash reports gain/loss and return as inapplicable rather than zero.
+- Failed performance-tracking imports are caught, removing an intermittent CI
+  failure where all tests passed but Vitest reported teardown errors.
+- Quote validation, the quote type, unit-price derivation, and dashboard
+  placeholder/colour helpers are shared; unused total wrappers and the
+  `ValueCell`/`ProfitLossCell` components were removed.
+- PR image validation reads the shared image cache without writing it, and a
+  manual `publish_beta` run from another branch leaves a warning.
+
+Validation: 84 unit tests across 4 suites, Svelte check, production builds, and
+all workflow runs pass. A browser smoke test of the production image with
+local test data confirmed row values, cash rows, sorting in both directions,
+display-currency switching, filtered totals, and retained quotes after a
+failed refresh.
+
 ## Initial audit priorities and evidence
+
+History from the 2026-10-20 audit. The P0 items are done; see
+[Current plan](#current-plan) for how the P1 and P2 items were resolved.
 
 | Priority | Observed behavior and evidence                                                                                                                                                                                                                                                                                      | Next deliverable and acceptance check                                                                                                                                                                                                                                                | Owner / effort                         |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
@@ -237,70 +263,39 @@ Do not infer a measured rounding-error percentage from floating-point storage.
 Do not call public demo credentials a new secret leak; review real credential,
 session-token, and financial-data logging separately before changing log levels.
 
-## Delivery sequence
+## Current plan
 
-### Phase 1: Reproducible checks and safe releases
+Agreed on 2026-11-01. The earlier four-phase delivery sequence is replaced by
+the [app optimization spec](../.scratch/app-optimization/spec.md), which holds
+the decisions, acceptance checks, and blockers. Priorities, in order: easier to
+change, more correct and safer, faster, leaner to run.
 
-1. Capture installed runtimes and existing check/test output. Fix the Node
-   mismatch in its own change, then establish backend and frontend regression
-   infrastructure without real API keys, provider traffic, or user databases.
-2. Add CI check/unit jobs and disposable integration fixtures. Gate image
-   publication with successful checks, and explicitly restrict push/release
-   behavior to intended branch pushes. Verify fork and same-repository PRs.
-3. Keep the current release-message markers until the versioning policy is
-   deliberately changed; `feat:` alone does not currently request a minor bump.
+1. Documentation: glossary, ADRs, this plan, delivery rules
+2. Interface labels: Location, Gain/Loss, Return
+3. Display precision for quantities and small prices
+4. Python 3.14, minor/patch dependency bumps, `requirements-dev.txt`
+5. Backend tests: holdings create/read/update/delete
+6. Backend tests: prices and conversions with mocked providers
+7. Backend tests: authentication off, on, and demo modes
+8. CI: backend tests gate publication
+9. One database session owner: `get_db` everywhere
+10. Holding validation rules and a read-only violation check
+11. Non-blocking market-data lookups
 
-Exit: a deliberate failing test blocks publication, a PR cannot publish or
-release, and compatible clean builds work. Rollback: revert workflow/toolchain
-changes independently; retain the last known-good image digest.
+Features and risky changes go through a PR to `main`; small, low-risk changes
+may be pushed directly to `main`. `beta` is no longer part of the flow.
 
-### Phase 2: Financial correctness and recovery
+### Dropped or deferred audit items
 
-1. Fix mixed-unit fallbacks and missing-price completeness with mocked rates.
-   Test purchase currency independently from quote and display currencies.
-2. Agree on validation and rounding rules. Preserve valid existing holdings;
-   changing SQLite types to Decimal is not automatically an exact-decimal design
-   and is not a prerequisite for every calculation fix.
-3. Test authentication enabled/disabled/demo modes, session expiry and logout,
-   cookie configuration, rate limiting, and log redaction. Treat these as review
-   targets until a concrete defect is reproduced.
-4. Define a consistent SQLite backup procedure, restore into a temporary path,
-   and compare holdings and schema. Check migrations and demo cleanup against
-   that recovery procedure before altering persisted data.
-
-Exit: deterministic fixtures cover unavailable prices, partial FX failure,
-cross-currency cost basis, invalid inputs, and restoration. Rollback: keep API
-changes additive where possible; restore backups only through a rehearsed path.
-
-### Phase 3: Measured performance improvements
-
-Use synthetic portfolios of 10, 100, and 1,000 positions with repeated symbols
-and three currencies. Exercise fresh cache, expired cache, provider timeout,
-manual refresh, sorting, and currency switches. Record machine/runtime details.
-
-| Measure               | Baseline method                                                                                | Acceptance criterion                                                                                                         |
-| --------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| API responsiveness    | Compare health-request p50/p95 during idle and a fixed slow-provider simulation.               | Agree a latency budget before implementation; eliminate event-loop starvation under the same workload.                       |
-| Request amplification | Count UI requests, unique symbols/pairs, provider calls, cache hits, and concurrent refreshes. | Warm-cache operations require zero provider calls; concurrent identical misses coalesce or obey an explicit provider budget. |
-| Dashboard work        | Record sorting/total calculation counts and desktop/mobile browser traces.                     | Avoid redundant quote/conversion work for unchanged snapshots without stale totals after mutations or currency changes.      |
-| SQLite contention     | Count writes and lock errors during authenticated polling plus manual refresh.                 | No lock failures in the controlled workload; reduce unnecessary writes without extending session validity incorrectly.       |
-| Delivery cost         | Record compressed JS payload, build time, image size, and runtime memory.                      | Agree budgets from the baseline; split/lazy-load heavy charts only when the trace justifies it.                              |
-
-Use existing cache/performance facilities only after confirming they are wired
-into the active request path. Avoid adding another cache layer, unbounded
-parallel requests, or a database rewrite. Rollback each optimization separately;
-keep it only when correctness checks pass and before/after results support it.
-
-### Phase 4: Deployment and ongoing maintenance
-
-Harden the container after the volume recovery test. Review dependency updates,
-retention, health/readiness behavior, environment-variable precedence, provider
-timeouts, and scheduling shutdown. Add compatible configuration changes with
-documented precedence and deprecation rather than breaking existing env files.
-Confirm external telemetry is opt-in and that personal holdings stay local.
-
-Exit: non-root image reads/writes an existing volume safely, backups restore,
-dependency findings are triaged, and upgrades have a tested rollback procedure.
+| Item                                               | Decision | Reason                                                                                                          |
+| -------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| Synthetic 10/100/1,000-holding benchmarks          | Dropped  | Nothing feels slow; only blocking provider calls (item 11) are a real problem.                                  |
+| Fewer session writes on authenticated requests     | Deferred | Matters only with login on and heavy polling; no observed slowness.                                             |
+| Non-root container user                            | Dropped  | Would require changing ownership of existing data directories ([ADR 0003](adr/0003-container-runs-as-root.md)). |
+| Image scanning and upgrade-rollback procedures     | Dropped  | Out of scope for a single-user, manually updated installation.                                                  |
+| Backup and restore rehearsal                       | Dropped  | Daily backups exist and restores have been done.                                                                |
+| Exact-decimal storage and rounding golden fixtures | Dropped  | Floats are kept and rounded only for display ([ADR 0002](adr/0002-floats-for-money.md)).                        |
+| Wallet syncing                                     | Parked   | Decided but not the current focus ([wallet sync spec](../.scratch/wallet-sync/spec.md)).                        |
 
 ## Validation commands and limits
 
@@ -356,4 +351,4 @@ Create approved tickets under `.scratch/<feature>/issues/NN-<slug>.md` using
 [local tracker conventions](agents/issue-tracker.md). Keep one implementation
 purpose per branch/commit; include the regression check and rollback in each
 ticket. Obtain authorization before creating branches or publishing changes.
-No GitHub Issues or speculative implementation tickets are created by this plan.
+No GitHub Issues are created by this plan.

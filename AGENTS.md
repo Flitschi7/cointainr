@@ -36,9 +36,11 @@ and validation. For optimization priorities, read `docs/OPTIMIZATION_ROADMAP.md`
 - The current release workflow recognizes `[feat]`/`[minor]` and
   `[breaking]`/`[major]`, not Conventional Commit release semantics. Preserve
   that distinction until an explicitly approved release-policy change.
-- Review findings before publication. Use a feature branch and PR when
-  authorized; avoid direct pushes to `main` or `beta` by default because pushes
-  trigger image publication. Confirm the target and deployment effects first.
+- Review findings before publication. Features and risky changes (dependencies,
+  CI, data access, persisted data) use a feature branch and PR to `main`. Small,
+  low-risk changes may be pushed directly to `main` when authorized. Every push
+  to `main` publishes images, so confirm the target first. `beta` is not part of
+  the flow; do not sync it.
 - Use normal, non-force pushes. Report commit hashes, checks, and whether work
   was pushed. Leave authentication and signing credentials with the user.
 
