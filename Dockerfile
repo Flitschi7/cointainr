@@ -24,19 +24,14 @@ COPY frontend/.prettierignore ./
 RUN npm run build
 
 # Stage 2: Final image
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Python dependencies
+# Install runtime Python dependencies (all ship wheels, so no compiler is needed)
 # This layer will be cached unless requirements.txt changes
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --only-binary=:all: -r requirements.txt
 
 # Copy only necessary backend code
 # Exclude tests, __pycache__, and other non-runtime files
