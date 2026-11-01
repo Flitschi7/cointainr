@@ -179,7 +179,7 @@
 	// Initialize the price management service with loaded prices
 	$: if (assetPrices.size > 0 && !priceManagementService.isPricesLoaded()) {
 		// Set the prices in the service
-		priceManagementService.setPrices(assetPrices);
+		priceManagementService.setPrices(assetPrices, allAssets);
 		if (isDev) {
 			log(`Initialized PriceManagementService with ${assetPrices.size} prices`);
 		}
@@ -212,6 +212,8 @@
 			// Use the price management service to fetch all prices
 			// Pass the forceRefresh parameter to respect cache when appropriate
 			const pricesMap = await priceManagementService.fetchAllCurrentPrices(allAssets, forceRefresh);
+			// A newer load superseded this one and owns the page state
+			if (pricesMap === null) return;
 
 			// Update the local variables
 			assetPrices = pricesMap;

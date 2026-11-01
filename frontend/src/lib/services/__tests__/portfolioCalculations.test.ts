@@ -482,7 +482,7 @@ describe('Portfolio totals', () => {
 		await prices.fetchAllCurrentPrices([euroHolding], true);
 		releaseOldQuote(Response.json({ price: 100, currency: 'EUR' }));
 
-		expect((await oldLoad).get(euroHolding.id)?.price).toBe(120);
+		expect(await oldLoad).toBeNull();
 		expect(prices.getPriceMap().get(euroHolding.id)?.price).toBe(120);
 	});
 
@@ -491,18 +491,64 @@ describe('Portfolio totals', () => {
 		async (price) => {
 			vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Offline')));
 			const prices = new PriceManagementService();
-			prices.setPrices(new Map([[euroHolding.id, { price, currency: 'EUR' }]]));
+			prices.setPrices(new Map([[euroHolding.id, { price, currency: 'EUR' }]]), [euroHolding]);
 
 			const refreshed = await prices.fetchAllCurrentPrices([euroHolding], true);
 
-			expect(refreshed.get(euroHolding.id)).toEqual({ price, currency: 'EUR' });
+			expect(refreshed?.get(euroHolding.id)).toEqual({ price, currency: 'EUR' });
 		}
 	);
+
+	it.each<{ label: string; edited: Asset }>([
+		{ label: 'symbol', edited: { ...euroHolding, symbol: 'OTHER' } },
+		{ label: 'type', edited: { ...euroHolding, type: 'crypto' } }
+	])('does not retain an offline quote after the holding $label changes', async ({ edited }) => {
+		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Offline')));
+		const prices = new PriceManagementService();
+		prices.setPrices(new Map([[euroHolding.id, { price: 100, currency: 'EUR' }]]), [euroHolding]);
+
+		const refreshed = await prices.fetchAllCurrentPrices([edited], true);
+
+		expect(refreshed?.has(euroHolding.id)).toBe(false);
+	});
+
+	it('never retains offline quotes set without their holdings', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Offline')));
+		const prices = new PriceManagementService();
+		prices.updatePrices(new Map([[euroHolding.id, { price: 100, currency: 'EUR' }]]));
+
+		const refreshed = await prices.fetchAllCurrentPrices([euroHolding], true);
+
+		expect(refreshed?.has(euroHolding.id)).toBe(false);
+	});
+
+	it('marks cash investment metrics inapplicable and sorts them last', async () => {
+		const service = new PortfolioCalculationService(
+			new Map([[euroHolding.id, { price: 70, currency: 'EUR' }]])
+		);
+		const valuation = await service.calculatePortfolioValuation([euroCash, euroHolding], 'EUR');
+
+		expect(valuation.positions.get(euroCash.id)).toEqual({
+			currentPrice: null,
+			purchasePrice: null,
+			value: 20,
+			investmentValue: null,
+			yield: null,
+			performance: null
+		});
+		for (const direction of ['asc', 'desc'] as const) {
+			expect(
+				sortValuedAssets([euroCash, euroHolding], valuation.positions, 'yield', direction).map(
+					(asset) => asset.id
+				)
+			).toEqual([euroHolding.id, euroCash.id]);
+		}
+	});
 
 	it('does not turn a failed quote request into a known zero price', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Quote unavailable')));
 		const prices = await new PriceManagementService().fetchAllCurrentPrices([euroHolding]);
-		const service = new PortfolioCalculationService(prices);
+		const service = new PortfolioCalculationService(prices ?? new Map());
 
 		const totals = await service.calculatePortfolioTotals([euroHolding], 'USD');
 
