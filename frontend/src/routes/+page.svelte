@@ -24,7 +24,12 @@
 		type PositionValuation
 	} from '$lib/services/portfolioCalculations';
 	import { onMount, onDestroy } from 'svelte';
-	import { formatCurrency, formatPercentage, formatNumber } from '$lib/utils/numberFormat';
+	import {
+		formatCurrency,
+		formatPercentage,
+		formatQuantity,
+		formatUnitPrice
+	} from '$lib/utils/numberFormat';
 	import { debounce } from 'lodash-es';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -305,9 +310,14 @@
 
 	$: unavailableLabel = isCalculatingTotals ? '...' : 'Unavailable';
 
-	function formatValuation(value: number | null | undefined, percentage = false): string {
+	function formatValuation(
+		value: number | null | undefined,
+		kind: 'money' | 'unitPrice' | 'percentage' = 'money'
+	): string {
 		if (value == null) return unavailableLabel;
-		return percentage ? formatPercentage(value) : formatCurrency(value, totalCurrency);
+		if (kind === 'percentage') return formatPercentage(value);
+		if (kind === 'unitPrice') return formatUnitPrice(value, totalCurrency);
+		return formatCurrency(value, totalCurrency);
 	}
 
 	function profitLossClass(value: number | null | undefined): string {
@@ -700,7 +710,7 @@
 										{#if asset.type === 'cash'}
 											-
 										{:else}
-											{formatNumber(asset.quantity)}
+											{formatQuantity(asset.quantity)}
 										{/if}
 									</td>
 
@@ -712,10 +722,10 @@
 											<span
 												title={asset.purchase_price !== null &&
 												(asset.buy_currency || asset.currency)
-													? `Original: ${formatCurrency(asset.purchase_price, asset.buy_currency || asset.currency || '')}`
+													? `Original: ${formatUnitPrice(asset.purchase_price, asset.buy_currency || asset.currency || '')}`
 													: undefined}
 											>
-												{formatValuation(valuation?.purchasePrice)}
+												{formatValuation(valuation?.purchasePrice, 'unitPrice')}
 											</span>
 										{/if}
 									</td>
@@ -725,7 +735,7 @@
 										{#if asset.type === 'cash'}
 											-
 										{:else}
-											{formatValuation(valuation?.currentPrice)}
+											{formatValuation(valuation?.currentPrice, 'unitPrice')}
 										{/if}
 									</td>
 
@@ -751,7 +761,7 @@
 											-
 										{:else}
 											<span class={profitLossClass(valuation?.performance)}>
-												{formatValuation(valuation?.performance, true)}
+												{formatValuation(valuation?.performance, 'percentage')}
 											</span>
 										{/if}
 									</td>
