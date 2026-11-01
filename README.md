@@ -26,16 +26,18 @@ describes the repository-specific Copilot agents, local issue workflow, and
 commit/publication rules. Select the agents from `.github/agents/` in Copilot.
 
 Use the Node version in [frontend/.nvmrc](frontend/.nvmrc) for local frontend
-development; Docker and CI use the same major version. CI runs the frontend
-typecheck, unit tests, and build before image publication.
+development; Docker and CI use the same major version. The backend uses the
+Python version in [backend/.python-version](backend/.python-version). CI runs
+the frontend typecheck, unit tests, and build, plus the backend tests, before
+image validation or publication.
 
 ### Build and Publication
 
-| Event                         | Automatic work                                                                    |
-| ----------------------------- | --------------------------------------------------------------------------------- |
-| Push to `beta`                | Frontend typecheck, unit tests, and build; no image publication                   |
-| PR targeting `main` or `beta` | Frontend checks plus an AMD64 image build; no publication                         |
-| Push to `main`                | Frontend checks, AMD64/ARM64 image publication, and the existing release workflow |
+| Event                         | Automatic work                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| Push to `beta`                | Frontend checks and backend tests; no image publication                       |
+| PR targeting `main` or `beta` | Frontend checks, backend tests, and an AMD64 image build; no publication      |
+| Push to `main`                | Both checks, AMD64/ARM64 image publication, and the existing release workflow |
 
 Features and risky changes reach `main` through pull requests; small, low-risk
 changes may be pushed to `main` directly. The `beta` branch is not part of the
@@ -45,7 +47,7 @@ Newer beta-push and PR runs cancel superseded runs for the same event/ref.
 Release runs are not automatically cancelled. Release builds import and export
 layer caches; PR validation only reads them, because GitHub scopes PR caches to
 the PR. No path filters are used, so documentation-only changes still receive
-the frontend checks.
+the frontend checks and backend tests.
 
 To publish an optional beta image, open
 **Actions > Build and Push Docker Image > Run workflow**, select the `beta`
