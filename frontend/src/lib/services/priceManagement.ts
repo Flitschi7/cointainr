@@ -1,6 +1,7 @@
-import type { Asset, PriceResponse } from '$lib/types';
+import type { Asset, Quote } from '$lib/types';
 import { devLog } from '$lib/utils/logger';
 import * as enhancedApi from './enhancedApi';
+import { isValidQuote } from './portfolioCalculations';
 
 // A retained quote is only valid for the instrument it was loaded for.
 function quoteIdentity(asset: Asset): string {
@@ -8,7 +9,7 @@ function quoteIdentity(asset: Asset): string {
 }
 
 export class PriceManagementService {
-	private assetPrices: Map<number, { price: number; currency: string }> = new Map();
+	private assetPrices: Map<number, Quote> = new Map();
 	private quoteIdentities: Map<number, string> = new Map();
 	private pricesLoaded = false;
 	private loadRevision = 0;
@@ -17,69 +18,47 @@ export class PriceManagementService {
 	async fetchAllCurrentPrices(
 		assets: Asset[],
 		forceRefresh: boolean = false
-	): Promise<Map<number, { price: number; currency: string }> | null> {
+	): Promise<Map<number, Quote> | null> {
 		const revision = ++this.loadRevision;
-		console.log(`=== fetchAllCurrentPrices START (forceRefresh: ${forceRefresh}) ===`);
-		console.log('allAssets:', assets);
-		console.log(
-			'Non-cash assets to fetch prices for:',
-			assets.filter((asset) => asset.type !== 'cash')
-		);
+		const holdings = assets.filter((asset) => asset.type !== 'cash');
+		devLog.debug(`=== fetchAllCurrentPrices START (forceRefresh: ${forceRefresh}) ===`);
+		devLog.debug('Non-cash assets to fetch prices for:', holdings);
 
 		try {
-			const pricePromises = assets
-				.filter((asset) => asset.type !== 'cash') // Skip cash assets
-				.map(async (asset) => {
-					console.log(
-						`Fetching price for asset: ${asset.symbol}, type: ${asset.type}, forceRefresh: ${forceRefresh}`
-					);
-					try {
-						// Use the enhanced API with cache-first approach
-						const priceData = await enhancedApi.getPrice(
-							asset.symbol || '',
-							asset.type as 'stock' | 'crypto',
-							{
-								forceRefresh
-							}
-						);
-
-						console.log(`Price data for ${asset.symbol}:`, priceData);
-
-						if (
-							priceData &&
-							priceData.source !== 'error' &&
-							Number.isFinite(priceData.price) &&
-							priceData.price >= 0 &&
-							priceData.currency
-						) {
-							return {
-								assetId: asset.id,
-								price: priceData.price,
-								currency: priceData.currency
-							};
+			const pricePromises = holdings.map(async (asset) => {
+				try {
+					// Use the enhanced API with cache-first approach
+					const priceData = await enhancedApi.getPrice(
+						asset.symbol || '',
+						asset.type as 'stock' | 'crypto',
+						{
+							forceRefresh
 						}
-					} catch (error) {
-						console.error(`Failed to fetch price for ${asset.symbol}:`, error);
+					);
+
+					devLog.debug(`Price data for ${asset.symbol}:`, priceData);
+
+					if (priceData && priceData.source !== 'error' && isValidQuote(priceData)) {
+						return {
+							assetId: asset.id,
+							price: priceData.price,
+							currency: priceData.currency
+						};
 					}
-					return null;
-				});
+				} catch (error) {
+					console.error(`Failed to fetch price for ${asset.symbol}:`, error);
+				}
+				return null;
+			});
 
 			const prices = await Promise.all(pricePromises);
 			if (revision !== this.loadRevision) return null;
-			console.log('All fetched prices:', prices);
 
 			// Update the assetPrices map
-			const newPricesMap = new Map<number, { price: number; currency: string }>();
-			for (const asset of assets) {
+			const newPricesMap = new Map<number, Quote>();
+			for (const asset of holdings) {
 				const previous = this.assetPrices.get(asset.id);
-				if (
-					asset.type !== 'cash' &&
-					this.quoteIdentities.get(asset.id) === quoteIdentity(asset) &&
-					previous &&
-					Number.isFinite(previous.price) &&
-					previous.price >= 0 &&
-					previous.currency
-				) {
+				if (this.quoteIdentities.get(asset.id) === quoteIdentity(asset) && isValidQuote(previous)) {
 					newPricesMap.set(asset.id, previous);
 				}
 			}
@@ -101,7 +80,7 @@ export class PriceManagementService {
 		}
 	}
 
-	getPriceMap(): Map<number, { price: number; currency: string }> {
+	getPriceMap(): Map<number, Quote> {
 		return this.assetPrices;
 	}
 
@@ -110,7 +89,7 @@ export class PriceManagementService {
 	}
 
 	/** `assets` are the holdings the prices were loaded for; their quotes may be retained offline. */
-	setPrices(pricesMap: Map<number, { price: number; currency: string }>, assets: Asset[]): void {
+	setPrices(pricesMap: Map<number, Quote>, assets: Asset[]): void {
 		this.loadRevision += 1;
 		devLog.info(`PriceManagementService: Set ${pricesMap.size} prices`);
 		this.assetPrices = pricesMap;
@@ -119,7 +98,7 @@ export class PriceManagementService {
 	}
 
 	/** Prices without known holdings are used as given but never retained offline. */
-	updatePrices(newPrices: Map<number, { price: number; currency: string }>): void {
+	updatePrices(newPrices: Map<number, Quote>): void {
 		this.loadRevision += 1;
 		this.assetPrices = newPrices;
 		this.quoteIdentities = new Map();

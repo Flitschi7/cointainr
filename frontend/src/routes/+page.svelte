@@ -9,7 +9,7 @@
 	import PortfolioRiskScore from '$lib/components/PortfolioRiskScore.svelte';
 	import PortfolioEfficiency from '$lib/components/PortfolioEfficiency.svelte';
 	import * as enhancedApi from '$lib/services/enhancedApi';
-	import type { Asset } from '$lib/types';
+	import type { Asset, Quote } from '$lib/types';
 	import type { RefreshAllResponse, AssetCacheStatus } from '$lib/types';
 	import { refreshAssetCacheStatus } from '$lib/stores/assetStatusStore';
 	import { getContext } from 'svelte';
@@ -18,6 +18,7 @@
 	import { PriceManagementService } from '$lib/services/priceManagement';
 	import {
 		PortfolioCalculationService,
+		isValidQuote,
 		sortValuedAssets,
 		type PortfolioSortField,
 		type PositionValuation
@@ -91,7 +92,7 @@
 
 	// Store current prices for sorting and aggregation
 	// Initialize with any prices loaded during page load
-	let assetPrices: Map<number, { price: number; currency: string }> = new Map();
+	let assetPrices: Map<number, Quote> = new Map();
 	let pricesLoaded = false;
 	let totalCurrency = 'EUR'; // Default currency for totals display
 
@@ -102,20 +103,13 @@
 			const assetId = parseInt(key, 10);
 			if (!isNaN(assetId) && value && typeof value === 'object') {
 				// Type check to ensure value has price and currency properties
-				const priceValue = 'price' in value ? (value.price as number) : NaN;
-				const currencyValue = 'currency' in value ? (value.currency as string) : '';
-				if (
-					!Number.isFinite(priceValue) ||
-					priceValue < 0 ||
-					!currencyValue ||
-					('source' in value && value.source === 'error')
-				)
-					return;
+				const quote = {
+					price: 'price' in value ? (value.price as number) : NaN,
+					currency: 'currency' in value ? (value.currency as string) : ''
+				};
+				if (!isValidQuote(quote) || ('source' in value && value.source === 'error')) return;
 
-				assetPrices.set(assetId, {
-					price: priceValue,
-					currency: currencyValue
-				});
+				assetPrices.set(assetId, quote);
 			}
 		});
 
@@ -158,10 +152,9 @@
 	let filterType: 'all' | 'cash' | 'stock' | 'crypto' | 'derivative' = 'all';
 
 	// Sorting state
-	type SortField = PortfolioSortField;
-	let sortField: SortField | null = null;
+	let sortField: PortfolioSortField | null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
-	const sortColumns: { field: SortField; label: string; numeric: boolean }[] = [
+	const sortColumns: { field: PortfolioSortField; label: string; numeric: boolean }[] = [
 		{ field: 'location', label: 'Location/Broker', numeric: false },
 		{ field: 'type', label: 'Type', numeric: false },
 		{ field: 'asset', label: 'Asset', numeric: false },
@@ -248,7 +241,8 @@
 
 	// Reactive statement for filter changes - debounced
 	$: {
-		// Trigger debounced update when filters change
+		// Trigger debounced update when filters change. Svelte only re-runs this block for
+		// variables referenced in it, so the expression below exists to register them.
 		(filterLocation, filterSymbol, filterType, allAssets);
 		debouncedFilterUpdate();
 	}
@@ -256,7 +250,7 @@
 	let sortedAssets: Asset[] = [];
 
 	// Updated sort handler that triggers immediate update
-	function handleSort(field: SortField) {
+	function handleSort(field: PortfolioSortField) {
 		if (sortField === field) {
 			// Same field clicked, toggle direction
 			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
@@ -277,7 +271,7 @@
 	async function updateValuation(
 		assets: Asset[],
 		currency: string,
-		prices: Map<number, { price: number; currency: string }>,
+		prices: Map<number, Quote>,
 		ready: boolean
 	) {
 		const revision = ++totalsRevision;
@@ -309,9 +303,16 @@
 	$: updateValuation(filteredAssets, totalCurrency, assetPrices, pricesLoaded);
 	$: sortedAssets = sortValuedAssets(filteredAssets, positionValuations, sortField, sortDirection);
 
+	$: unavailableLabel = isCalculatingTotals ? '...' : 'Unavailable';
+
 	function formatValuation(value: number | null | undefined, percentage = false): string {
-		if (value == null) return isCalculatingTotals ? '...' : 'Unavailable';
+		if (value == null) return unavailableLabel;
 		return percentage ? formatPercentage(value) : formatCurrency(value, totalCurrency);
+	}
+
+	function profitLossClass(value: number | null | undefined): string {
+		if (value == null) return 'text-text-light';
+		return value >= 0 ? 'text-profit' : 'text-loss';
 	}
 
 	function openAddModal() {
@@ -738,13 +739,7 @@
 										{#if asset.type === 'cash'}
 											-
 										{:else}
-											<span
-												class={valuation?.yield == null
-													? 'text-text-light'
-													: valuation.yield >= 0
-														? 'text-profit'
-														: 'text-loss'}
-											>
+											<span class={profitLossClass(valuation?.yield)}>
 												{formatValuation(valuation?.yield)}
 											</span>
 										{/if}
@@ -755,13 +750,7 @@
 										{#if asset.type === 'cash'}
 											-
 										{:else}
-											<span
-												class={valuation?.performance == null
-													? 'text-text-light'
-													: valuation.performance >= 0
-														? 'text-profit'
-														: 'text-loss'}
-											>
+											<span class={profitLossClass(valuation?.performance)}>
 												{formatValuation(valuation?.performance, true)}
 											</span>
 										{/if}
@@ -812,7 +801,7 @@
 										<span
 											class="text-text-light"
 											title="A quote or currency conversion is unavailable."
-											>{isCalculatingTotals ? '...' : 'Unavailable'}</span
+											>{unavailableLabel}</span
 										>
 									{:else}
 										{formatCurrency(totalValue, totalCurrency)}
@@ -822,10 +811,10 @@
 								<td class="border-r border-gray-600 px-4 py-3 text-right">
 									{#if totalYield === null}
 										<span title="Quote, purchase cost, or currency conversion unavailable."
-											>{isCalculatingTotals ? '...' : 'Unavailable'}</span
+											>{unavailableLabel}</span
 										>
 									{:else}
-										<span class={totalYield >= 0 ? 'text-profit font-bold' : 'text-loss font-bold'}
+										<span class="{profitLossClass(totalYield)} font-bold"
 											>{formatCurrency(totalYield, totalCurrency)}</span
 										>
 									{/if}
@@ -834,13 +823,11 @@
 								<td class="border-r border-gray-600 px-4 py-3 text-right">
 									{#if totalPerformance === null}
 										<span title="Return requires complete values and a nonzero cost basis."
-											>{isCalculatingTotals ? '...' : 'Unavailable'}</span
+											>{unavailableLabel}</span
 										>
 									{:else}
-										<span
-											class={totalPerformance >= 0
-												? 'text-profit font-bold'
-												: 'text-loss font-bold'}>{formatPercentage(totalPerformance)}</span
+										<span class="{profitLossClass(totalPerformance)} font-bold"
+											>{formatPercentage(totalPerformance)}</span
 										>
 									{/if}
 								</td>
