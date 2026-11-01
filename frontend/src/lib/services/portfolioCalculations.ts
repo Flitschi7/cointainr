@@ -1,5 +1,10 @@
-import type { Asset } from '$lib/types';
+import type { Asset, Quote } from '$lib/types';
 import * as enhancedApi from './enhancedApi';
+
+/** A usable quote has a finite, non-negative price and a known currency; zero is valid. */
+export function isValidQuote(quote: Quote | null | undefined): quote is Quote {
+	return !!quote && Number.isFinite(quote.price) && quote.price >= 0 && !!quote.currency;
+}
 
 export interface PortfolioTotals {
 	totalValue: number | null;
@@ -81,9 +86,9 @@ function sumAmounts(values: (number | null)[]): number | null {
 }
 
 export class PortfolioCalculationService {
-	private assetPrices: Map<number, { price: number; currency: string }>;
+	private assetPrices: Map<number, Quote>;
 
-	constructor(assetPrices: Map<number, { price: number; currency: string }>) {
+	constructor(assetPrices: Map<number, Quote>) {
 		this.assetPrices = assetPrices;
 	}
 
@@ -118,16 +123,18 @@ export class PortfolioCalculationService {
 		}
 	}
 
-	async calculateTotalValue(assets: Asset[], targetCurrency: string): Promise<number | null> {
-		return (await this.calculatePortfolioTotals(assets, targetCurrency)).totalValue;
-	}
-
-	async calculateTotalYield(assets: Asset[], targetCurrency: string): Promise<number | null> {
-		return (await this.calculatePortfolioTotals(assets, targetCurrency)).totalYield;
-	}
-
-	async calculateTotalPerformance(assets: Asset[], targetCurrency: string): Promise<number | null> {
-		return (await this.calculatePortfolioTotals(assets, targetCurrency)).totalPerformance;
+	/**
+	 * Per-unit amount in the target currency. Derived from the position total, except for a
+	 * zero quantity, where the unit amount is converted directly to avoid dividing by zero.
+	 */
+	private async unitAmount(
+		unit: { amount: number; currency: string } | null,
+		total: number | null,
+		quantity: number,
+		targetCurrency: string
+	): Promise<number | null> {
+		if (quantity !== 0) return total === null ? null : finiteOrNull(total / quantity);
+		return unit ? this.convertAmount(unit.amount, unit.currency, targetCurrency) : null;
 	}
 
 	private async calculatePosition(
@@ -147,39 +154,29 @@ export class PortfolioCalculationService {
 		}
 
 		const quote = this.assetPrices.get(asset.id);
-		const hasQuote =
-			quote !== undefined && Number.isFinite(quote.price) && quote.price >= 0 && !!quote.currency;
+		const currentUnit = isValidQuote(quote)
+			? { amount: quote.price, currency: quote.currency }
+			: null;
 		const purchasePrice = asset.purchase_price;
 		const purchaseCurrency = asset.buy_currency || asset.currency;
-		const hasPurchase =
+		const purchaseUnit =
 			purchasePrice !== null &&
 			Number.isFinite(purchasePrice) &&
 			purchasePrice >= 0 &&
-			!!purchaseCurrency;
-		const [value, investmentValue] = await Promise.all([
-			hasQuote
-				? this.convertAmount(quote.price * asset.quantity, quote.currency, targetCurrency)
-				: null,
-			hasPurchase
-				? this.convertAmount(purchasePrice * asset.quantity, purchaseCurrency, targetCurrency)
-				: null
+			purchaseCurrency
+				? { amount: purchasePrice, currency: purchaseCurrency }
+				: null;
+		const [value, investmentValue] = await Promise.all(
+			[currentUnit, purchaseUnit].map((unit) =>
+				unit
+					? this.convertAmount(unit.amount * asset.quantity, unit.currency, targetCurrency)
+					: null
+			)
+		);
+		const [currentUnitPrice, purchaseUnitPrice] = await Promise.all([
+			this.unitAmount(currentUnit, value, asset.quantity, targetCurrency),
+			this.unitAmount(purchaseUnit, investmentValue, asset.quantity, targetCurrency)
 		]);
-		const currentUnitPrice =
-			asset.quantity === 0
-				? hasQuote
-					? await this.convertAmount(quote.price, quote.currency, targetCurrency)
-					: null
-				: value === null
-					? null
-					: finiteOrNull(value / asset.quantity);
-		const purchaseUnitPrice =
-			asset.quantity === 0
-				? hasPurchase
-					? await this.convertAmount(purchasePrice, purchaseCurrency, targetCurrency)
-					: null
-				: investmentValue === null
-					? null
-					: finiteOrNull(investmentValue / asset.quantity);
 		const profitLoss =
 			value !== null && investmentValue !== null ? finiteOrNull(value - investmentValue) : null;
 		return {
@@ -239,7 +236,7 @@ export class PortfolioCalculationService {
 	}
 
 	// Update the price map when new prices are fetched
-	updatePrices(newPrices: Map<number, { price: number; currency: string }>): void {
+	updatePrices(newPrices: Map<number, Quote>): void {
 		this.assetPrices = newPrices;
 	}
 }

@@ -38,6 +38,16 @@ export interface CacheStats {
 }
 
 /**
+ * Record a cache hit or miss in performance monitoring without blocking the caller.
+ * The module is loaded lazily; a failed load is ignored because tracking is optional.
+ */
+function trackCacheAccess(cacheType: 'price' | 'conversion', hit: boolean): void {
+	import('./performanceMonitoring')
+		.then((module) => module.trackCacheAccess(cacheType, hit))
+		.catch(() => {});
+}
+
+/**
  * CacheService class for managing cached data with TTL support
  */
 export class CacheService {
@@ -87,14 +97,7 @@ export class CacheService {
 				// Increment hit count
 				this.incrementHitCount(key);
 
-				// Track in performance monitoring
-				try {
-					import('../services/performanceMonitoring').then((module) => {
-						module.trackCacheAccess(cacheType, true);
-					});
-				} catch (e) {
-					// Ignore import errors
-				}
+				trackCacheAccess(cacheType, true);
 
 				return entry.data;
 			}
@@ -105,14 +108,7 @@ export class CacheService {
 			// Increment miss count
 			this.incrementMissCount(key);
 
-			// Track in performance monitoring
-			try {
-				import('../services/performanceMonitoring').then((module) => {
-					module.trackCacheAccess(cacheType, false);
-				});
-			} catch (e) {
-				// Ignore import errors
-			}
+			trackCacheAccess(cacheType, false);
 
 			// Fetch fresh data
 			const data = await fetchFn();

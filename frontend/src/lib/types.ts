@@ -31,6 +31,14 @@ export interface PriceResponse {
 }
 
 /**
+ * Market quote for one holding, in the currency the provider reported.
+ */
+export interface Quote {
+	price: number;
+	currency: string;
+}
+
+/**
  * Currency conversion response interface from the API.
  */
 export interface ConversionResponse {
