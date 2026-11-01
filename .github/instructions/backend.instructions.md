@@ -23,6 +23,6 @@ applyTo: "backend/**"
   Test auth enabled/disabled/demo modes when touching authentication or startup.
 - For persisted schema changes, define backup, restore, migration, and rollback
   checks first. Startup and demo cleanup must preserve non-demo holdings.
-- Inspect `backend/requirements.txt` and the selected interpreter before running
-  checks. Dependency packages can be transitive; absence of a direct import is
+- Inspect `backend/requirements.txt` (runtime) and `backend/requirements-dev.txt`
+  (test tools) and the selected interpreter before running checks. Dependency packages can be transitive; absence of a direct import is
   not evidence that a requirement can be removed.

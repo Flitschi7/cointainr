@@ -53,7 +53,9 @@ reverse are in [docs/adr/](../../docs/adr/).
 - Python 3.14 for local development and the image. Fall back to 3.13 only if a
   required package has no working 3.14 release.
 - Dependencies: bump to the newest minor/patch within current major versions;
-  majors are separate later changes.
+  majors are separate later changes. Accepted exception: transitive `cffi`
+  1 → 2, because cffi 1.x has no Python 3.14 wheels and current `curl_cffi`
+  (via yfinance) requires cffi 2.
 - Split test tools (`pytest`, `pytest-asyncio`, …) into
   `backend/requirements-dev.txt`; the runtime image installs only
   `requirements.txt`. Remove `gcc` from the runtime image if every runtime
@@ -120,7 +122,8 @@ means a small commit pushed to `main`.
 - **04**: a clean venv on 3.14 installs both requirement files; the backend
   starts locally against a copy of the test database; the image builds, starts
   offline, and passes health, HTML, and SQLite integrity checks; no package
-  crosses a major version; `pytest` is absent from the runtime image.
+  crosses a major version except the accepted `cffi` 2; `pytest` is absent
+  from the runtime image.
 - **05–07**: tests use a temporary database and mocked providers, never a real
   API key or provider call, and pass from a clean venv with one command.
 - **08**: a deliberately failing backend test blocks publication in a PR run.
