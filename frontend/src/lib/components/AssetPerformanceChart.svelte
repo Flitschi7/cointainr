@@ -226,8 +226,8 @@
 		<div class="flex items-center justify-center h-full text-center text-gray-400">
 			<div>
 				<div class="text-4xl mb-2">📈</div>
-				<p>No performance data available</p>
-				<p class="text-sm">Assets need purchase prices to show performance</p>
+				<p>No return data available</p>
+				<p class="text-sm">Holdings need purchase prices to show a return</p>
 			</div>
 		</div>
 	{:else}

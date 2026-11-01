@@ -50,7 +50,7 @@
 
 		assets.forEach(asset => {
 			let value = 0;
-			const brokerName = asset.name || 'Unknown Broker';
+			const brokerName = asset.name || 'Unknown location';
 
 			if (asset.type === 'cash') {
 				value = asset.quantity;

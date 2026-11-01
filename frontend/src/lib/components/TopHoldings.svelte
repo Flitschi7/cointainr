@@ -57,7 +57,7 @@
 				percentage: 0, // Will be calculated after we have total
 				displayName: asset.assetname || asset.symbol || asset.name || 'Unknown',
 				type: asset.type,
-				broker: asset.name || 'Unknown Broker',
+				broker: asset.name || 'Unknown location',
 				profitLoss,
 				profitLossPercentage
 			};

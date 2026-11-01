@@ -101,7 +101,7 @@
 			</select>
 		</div>
 		<div>
-			<label for="name" class="text-text-light mb-1 block font-bold">Location/Broker</label>
+			<label for="name" class="text-text-light mb-1 block font-bold">Location</label>
 			<input
 				type="text"
 				id="name"
@@ -153,7 +153,7 @@
 		{#if formData.type !== 'cash'}
 			<div>
 				<label for="buy_currency" class="text-text-light mb-1 block font-bold"
-					>Buy Price Currency</label
+					>Purchase Currency</label
 				>
 				<input
 					type="text"

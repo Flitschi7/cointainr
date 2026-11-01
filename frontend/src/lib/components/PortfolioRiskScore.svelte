@@ -154,7 +154,7 @@
 		}
 		
 		if (brokers.size < 3) {
-			recommendations.push('Spread investments across more brokers to reduce platform risk');
+			recommendations.push('Spread investments across more locations to reduce platform risk');
 		}
 		
 		if (concentrationRisk > 70) {
@@ -246,7 +246,7 @@
 							style="width: {riskMetrics.diversificationScore}%"
 						></div>
 					</div>
-					<p class="text-xs text-gray-400 mt-1">Asset types, brokers & currencies</p>
+					<p class="text-xs text-gray-400 mt-1">Asset types, locations & currencies</p>
 				</div>
 
 				<!-- Concentration Risk -->

@@ -155,15 +155,15 @@
 	let sortField: PortfolioSortField | null = null;
 	let sortDirection: 'asc' | 'desc' = 'asc';
 	const sortColumns: { field: PortfolioSortField; label: string; numeric: boolean }[] = [
-		{ field: 'location', label: 'Location/Broker', numeric: false },
+		{ field: 'location', label: 'Location', numeric: false },
 		{ field: 'type', label: 'Type', numeric: false },
 		{ field: 'asset', label: 'Asset', numeric: false },
 		{ field: 'quantity', label: 'Quantity', numeric: true },
 		{ field: 'purchasePrice', label: 'Purchase Price', numeric: true },
 		{ field: 'currentPrice', label: 'Current Price', numeric: true },
 		{ field: 'value', label: 'Value', numeric: true },
-		{ field: 'yield', label: 'Yield', numeric: true },
-		{ field: 'performance', label: 'Performance', numeric: true }
+		{ field: 'yield', label: 'Gain/Loss', numeric: true },
+		{ field: 'performance', label: 'Return', numeric: true }
 	];
 
 	// Initialize services
@@ -547,7 +547,7 @@
 				<input
 					type="text"
 					bind:value={filterLocation}
-					placeholder="Filter by location or broker..."
+					placeholder="Filter by location..."
 					class="bg-surface text-text-light focus:border-primary focus:ring-primary w-full rounded-lg border border-gray-600 px-3 py-2 text-sm placeholder-gray-400 focus:ring-1 focus:outline-none sm:w-auto"
 				/>
 				<input
@@ -680,7 +680,7 @@
 									class="hover:bg-background focus:ring-primary cursor-pointer border-b border-gray-600 transition-all duration-200 hover:shadow-sm focus:ring-2 focus:outline-none"
 									aria-label={`Edit asset ${asset.name}`}
 								>
-									<!-- 1. Location/Broker -->
+									<!-- 1. Location -->
 									<td class="col-span-2 border-r border-gray-600 px-2 py-2 sm:px-4 sm:py-3"
 										>{asset.name}</td
 									>
@@ -734,7 +734,7 @@
 										{formatValuation(valuation?.value)}
 									</td>
 
-									<!-- 8. Yield -->
+									<!-- 8. Gain/Loss -->
 									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
 										{#if asset.type === 'cash'}
 											-
@@ -745,7 +745,7 @@
 										{/if}
 									</td>
 
-									<!-- 9. Performance -->
+									<!-- 9. Return -->
 									<td class="border-r border-gray-600 px-2 py-2 text-right sm:px-4 sm:py-3">
 										{#if asset.type === 'cash'}
 											-
@@ -781,7 +781,7 @@
 						</tbody>
 						<tfoot>
 							<tr class="bg-background border-gold border-t-2 font-bold">
-								<!-- 1-2. Location/Broker + Type (colspan=2) -->
+								<!-- 1-2. Location + Type (colspan=2) -->
 								<td class="border-r border-gray-600 px-4 py-3" colspan="2">
 									<span class="text-gold">TOTAL ({sortedAssets.length} assets)</span>
 								</td>
@@ -807,7 +807,7 @@
 										{formatCurrency(totalValue, totalCurrency)}
 									{/if}
 								</td>
-								<!-- 8. Yield -->
+								<!-- 8. Gain/Loss -->
 								<td class="border-r border-gray-600 px-4 py-3 text-right">
 									{#if totalYield === null}
 										<span title="Quote, purchase cost, or currency conversion unavailable."
@@ -819,7 +819,7 @@
 										>
 									{/if}
 								</td>
-								<!-- 9. Performance -->
+								<!-- 9. Return -->
 								<td class="border-r border-gray-600 px-4 py-3 text-right">
 									{#if totalPerformance === null}
 										<span title="Return requires complete values and a nonzero cost basis."
@@ -864,12 +864,12 @@
 				</div>
 
 				<div class="bg-background rounded-lg p-6">
-					<h3 class="font-headline text-gold mb-4 text-lg">By Broker</h3>
+					<h3 class="font-headline text-gold mb-4 text-lg">By Location</h3>
 					<BrokerPieChart assets={sortedAssets} {totalCurrency} {assetPrices} {refreshTrigger} />
 				</div>
 
 				<div class="bg-background rounded-lg p-6">
-					<h3 class="font-headline text-gold mb-4 text-lg">Asset Performance</h3>
+					<h3 class="font-headline text-gold mb-4 text-lg">Return by Asset</h3>
 					<AssetPerformanceChart
 						assets={sortedAssets}
 						{totalCurrency}
