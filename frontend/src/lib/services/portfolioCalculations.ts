@@ -51,7 +51,6 @@ export function sortValuedAssets(
 			case 'quantity':
 				return asset.type === 'cash' ? null : finiteOrNull(asset.quantity);
 			default:
-				if (asset.type === 'cash' && (field === 'yield' || field === 'performance')) return null;
 				return positions.get(asset.id)?.[field] ?? null;
 		}
 	};
@@ -86,14 +85,6 @@ export class PortfolioCalculationService {
 
 	constructor(assetPrices: Map<number, { price: number; currency: string }>) {
 		this.assetPrices = assetPrices;
-	}
-
-	getCurrentPrice(asset: Asset): number {
-		if (asset.type === 'cash') {
-			return 1; // Cash has no price, value is just quantity
-		}
-		const priceData = this.assetPrices.get(asset.id);
-		return priceData?.price ?? 0;
 	}
 
 	private async convertAmount(amount: number, from: string, to: string): Promise<number | null> {
@@ -144,13 +135,14 @@ export class PortfolioCalculationService {
 		targetCurrency: string
 	): Promise<PositionValuation> {
 		if (asset.type === 'cash') {
+			// Cash has a value but no cost basis, so its investment metrics are inapplicable.
 			return {
 				currentPrice: null,
 				purchasePrice: null,
 				value: await this.convertAmount(asset.quantity, asset.currency || '', targetCurrency),
-				investmentValue: 0,
-				yield: 0,
-				performance: 0
+				investmentValue: null,
+				yield: null,
+				performance: null
 			};
 		}
 

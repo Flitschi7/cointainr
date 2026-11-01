@@ -2,15 +2,22 @@ import type { Asset, PriceResponse } from '$lib/types';
 import { devLog } from '$lib/utils/logger';
 import * as enhancedApi from './enhancedApi';
 
+// A retained quote is only valid for the instrument it was loaded for.
+function quoteIdentity(asset: Asset): string {
+	return `${asset.type}:${asset.symbol ?? ''}`;
+}
+
 export class PriceManagementService {
 	private assetPrices: Map<number, { price: number; currency: string }> = new Map();
+	private quoteIdentities: Map<number, string> = new Map();
 	private pricesLoaded = false;
 	private loadRevision = 0;
 
+	/** Resolves to null when a newer load or price update superseded this one. */
 	async fetchAllCurrentPrices(
 		assets: Asset[],
 		forceRefresh: boolean = false
-	): Promise<Map<number, { price: number; currency: string }>> {
+	): Promise<Map<number, { price: number; currency: string }> | null> {
 		const revision = ++this.loadRevision;
 		console.log(`=== fetchAllCurrentPrices START (forceRefresh: ${forceRefresh}) ===`);
 		console.log('allAssets:', assets);
@@ -58,7 +65,7 @@ export class PriceManagementService {
 				});
 
 			const prices = await Promise.all(pricePromises);
-			if (revision !== this.loadRevision) return this.assetPrices;
+			if (revision !== this.loadRevision) return null;
 			console.log('All fetched prices:', prices);
 
 			// Update the assetPrices map
@@ -67,6 +74,7 @@ export class PriceManagementService {
 				const previous = this.assetPrices.get(asset.id);
 				if (
 					asset.type !== 'cash' &&
+					this.quoteIdentities.get(asset.id) === quoteIdentity(asset) &&
 					previous &&
 					Number.isFinite(previous.price) &&
 					previous.price >= 0 &&
@@ -81,6 +89,7 @@ export class PriceManagementService {
 			});
 
 			this.assetPrices = newPricesMap;
+			this.recordQuoteIdentities(assets);
 			this.pricesLoaded = true;
 			devLog.debug('Updated assetPrices Map:', Array.from(this.assetPrices.entries()));
 			devLog.debug('=== fetchAllCurrentPrices END ===');
@@ -92,19 +101,6 @@ export class PriceManagementService {
 		}
 	}
 
-	getCurrentPrice(asset: Asset): number {
-		if (asset.type === 'cash') {
-			return 1; // Cash has no price, value is just quantity
-		}
-		const priceData = this.assetPrices.get(asset.id);
-		devLog.debug(
-			`getCurrentPrice debug - Asset ID: ${asset.id}, Symbol: ${asset.symbol}, Price data:`,
-			priceData,
-			`Price: ${priceData?.price || 0}`
-		);
-		return priceData?.price || 0;
-	}
-
 	getPriceMap(): Map<number, { price: number; currency: string }> {
 		return this.assetPrices;
 	}
@@ -113,22 +109,35 @@ export class PriceManagementService {
 		return this.pricesLoaded;
 	}
 
-	setPrices(pricesMap: Map<number, { price: number; currency: string }>): void {
+	/** `assets` are the holdings the prices were loaded for; their quotes may be retained offline. */
+	setPrices(pricesMap: Map<number, { price: number; currency: string }>, assets: Asset[]): void {
 		this.loadRevision += 1;
 		devLog.info(`PriceManagementService: Set ${pricesMap.size} prices`);
 		this.assetPrices = pricesMap;
+		this.recordQuoteIdentities(assets);
 		this.pricesLoaded = true;
 	}
 
+	/** Prices without known holdings are used as given but never retained offline. */
 	updatePrices(newPrices: Map<number, { price: number; currency: string }>): void {
 		this.loadRevision += 1;
 		this.assetPrices = newPrices;
+		this.quoteIdentities = new Map();
 		this.pricesLoaded = true;
 	}
 
 	reset(): void {
 		this.loadRevision += 1;
 		this.assetPrices.clear();
+		this.quoteIdentities = new Map();
 		this.pricesLoaded = false;
+	}
+
+	private recordQuoteIdentities(assets: Asset[]): void {
+		this.quoteIdentities = new Map(
+			assets
+				.filter((asset) => this.assetPrices.has(asset.id))
+				.map((asset) => [asset.id, quoteIdentity(asset)])
+		);
 	}
 }
