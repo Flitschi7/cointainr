@@ -60,6 +60,9 @@ cd frontend
 npm ci
 npm run check
 npm run test:unit
+cd ../backend
+python -m pip install -r requirements-dev.txt
+python -m pytest
 cd ..
 docker build --tag cointainr:local .
 ```
