@@ -73,6 +73,8 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # Read-only cache: PR caches are scoped to the PR, so writing them only
+      # consumes shared quota and can evict the main branch cache.
       - name: Validate AMD64 Docker image without publishing
         uses: docker/build-push-action@v5
         with:
@@ -80,7 +82,14 @@ jobs:
           platforms: linux/amd64
           push: false
           cache-from: type=gha,scope=cointainr-image
-          cache-to: type=gha,scope=cointainr-image,mode=max
+
+  beta-publish-guard:
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_beta == true && github.ref != 'refs/heads/beta'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Explain skipped beta publication
+        run: echo "::warning title=Beta image not published::publish_beta only publishes from the beta branch; this run used ${GITHUB_REF_NAME}."
 
   build-and-push:
     if: >-
