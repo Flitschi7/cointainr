@@ -185,10 +185,11 @@ class PriceService:
                     f"Could not fetch price for {identifier} and no cached data available"
                 )
 
-        # Cache the fresh result
+        # Cache the fresh result under the identifier that was asked for, so a
+        # repeated ISIN request finds it
         await crud_price_cache.update_or_create_price_cache(
             db=db,
-            symbol=symbol,
+            symbol=identifier,
             asset_type="stock",
             price=price,
             currency=currency,

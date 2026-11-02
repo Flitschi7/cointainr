@@ -227,9 +227,7 @@ async def test_stock_quote_of_zero_everywhere_is_404(client, finnhub, yahoo):
     assert await count(PriceCache) == 0
 
 
-async def test_stock_isin_resolves_symbol_but_caches_under_symbol(client, finnhub):
-    """Current behavior: the quote is cached under the resolved symbol, so a
-    repeated ISIN request misses the cache and calls Finnhub again."""
+async def test_repeated_isin_quote_comes_from_cache(client, finnhub):
     finnhub.lookups = {"US0378331005": "AAPL"}
     finnhub.quotes = {"AAPL": 190.0}
 
@@ -237,8 +235,8 @@ async def test_stock_isin_resolves_symbol_but_caches_under_symbol(client, finnhu
     second = (await client.get(f"{PRICE}/stock/US0378331005")).json()
 
     assert first["symbol"] == "AAPL"
-    assert second["cached"] is False
-    assert finnhub.calls.count(("quote", "AAPL")) == 2
+    assert (second["price"], second["cached"]) == (190.0, True)
+    assert finnhub.calls.count(("quote", "AAPL")) == 1
 
 
 async def test_fresh_stock_cache_is_used_without_provider_calls(client, finnhub):
