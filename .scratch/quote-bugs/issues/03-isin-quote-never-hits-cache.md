@@ -1,6 +1,6 @@
 # Stock quotes requested by ISIN never hit the cache
 
-Status: needs-triage
+Status: ready-for-agent
 
 For an ISIN resolved through Finnhub, the quote is cached under the resolved
 symbol (e.g. `AAPL`), but lookups use the ISIN. Every ISIN request calls
