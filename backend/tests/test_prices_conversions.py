@@ -193,11 +193,33 @@ async def test_stock_quote_falls_back_to_yahoo(client, yahoo):
     )
 
 
-async def test_stock_quote_of_zero_from_finnhub_skips_yahoo(client, finnhub, yahoo):
-    """Current behavior: a 0 quote is not None, so Yahoo is never tried; the
-    cache schema then rejects the missing currency (a ValueError, so 404)."""
+async def test_stock_quote_of_zero_from_finnhub_falls_back_to_yahoo(
+    client, finnhub, yahoo
+):
     finnhub.quotes = {"ZERO": 0}
     yahoo["ZERO"] = {"regularMarketPrice": 5.0, "currency": "USD"}
+
+    response = await client.get(f"{PRICE}/stock/ZERO")
+
+    assert response.status_code == 200
+    assert (response.json()["price"], response.json()["source"]) == (5.0, "yfinance")
+
+
+async def test_isin_quote_of_zero_from_finnhub_falls_back_to_yahoo(
+    client, finnhub, yahoo
+):
+    finnhub.lookups = {"US0000000001": "ZERO"}
+    finnhub.quotes = {"ZERO": 0}
+    yahoo["US0000000001"] = {"regularMarketPrice": 5.0, "currency": "USD"}
+
+    response = await client.get(f"{PRICE}/stock/US0000000001")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "yfinance"
+
+
+async def test_stock_quote_of_zero_everywhere_is_404(client, finnhub, yahoo):
+    finnhub.quotes = {"ZERO": 0}
 
     response = await client.get(f"{PRICE}/stock/ZERO")
 

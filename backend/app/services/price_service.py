@@ -106,8 +106,9 @@ class PriceService:
                         quote = await asyncio.to_thread(
                             self.finnhub_client.quote, symbol
                         )
-                        price = quote.get("c")
-                        if price is not None and price != 0:
+                        # Finnhub answers 0 for unknown symbols; treat it as no quote
+                        price = quote.get("c") or None
+                        if price is not None:
                             currency = "USD"
                             source = "finnhub"
                 except Exception as e:
@@ -131,8 +132,9 @@ class PriceService:
             if self.finnhub_client:
                 try:
                     quote = await asyncio.to_thread(self.finnhub_client.quote, symbol)
-                    price = quote.get("c")
-                    if price is not None and price != 0:
+                    # Finnhub answers 0 for unknown symbols; treat it as no quote
+                    price = quote.get("c") or None
+                    if price is not None:
                         currency = "USD"
                         source = "finnhub"
                 except Exception as e:
