@@ -7,6 +7,14 @@ import yfinance as yf
 import httpx
 from typing import Dict, Optional
 from datetime import datetime, timedelta
+import asyncio
+
+
+# Finnhub and yfinance are synchronous HTTP clients. Every call to them runs in
+# a worker thread (asyncio.to_thread) so a slow provider does not stall other
+# requests.
+def _yahoo_info(symbol: str) -> Dict:
+    return yf.Ticker(symbol).info
 
 
 class PriceService:
@@ -90,10 +98,14 @@ class PriceService:
             # Try Finnhub first
             if self.finnhub_client:
                 try:
-                    search_result = self.finnhub_client.symbol_lookup(identifier)
+                    search_result = await asyncio.to_thread(
+                        self.finnhub_client.symbol_lookup, identifier
+                    )
                     if search_result and search_result.get("count", 0) > 0:
                         symbol = search_result["result"][0]["symbol"]
-                        quote = self.finnhub_client.quote(symbol)
+                        quote = await asyncio.to_thread(
+                            self.finnhub_client.quote, symbol
+                        )
                         price = quote.get("c")
                         if price is not None and price != 0:
                             currency = "USD"
@@ -104,8 +116,7 @@ class PriceService:
             # Fallback to Yahoo Finance
             if price is None:
                 try:
-                    ticker = yf.Ticker(identifier)
-                    info = ticker.info
+                    info = await asyncio.to_thread(_yahoo_info, identifier)
                     price = info.get("regularMarketPrice")
                     currency = info.get("currency", "USD")
                     if price is not None:
@@ -119,7 +130,7 @@ class PriceService:
             # Regular symbol - try Finnhub first
             if self.finnhub_client:
                 try:
-                    quote = self.finnhub_client.quote(symbol)
+                    quote = await asyncio.to_thread(self.finnhub_client.quote, symbol)
                     price = quote.get("c")
                     if price is not None and price != 0:
                         currency = "USD"
@@ -130,8 +141,7 @@ class PriceService:
             # Fallback to Yahoo Finance
             if price is None:
                 try:
-                    ticker = yf.Ticker(symbol)
-                    info = ticker.info
+                    info = await asyncio.to_thread(_yahoo_info, symbol)
                     price = info.get("regularMarketPrice")
                     currency = info.get("currency", "USD")
                     if price is not None:
