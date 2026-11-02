@@ -499,9 +499,7 @@ async def clear_price_cache(db: AsyncSession = db_dep):
     """
     from app.crud import crud_price_cache
 
-    cleared_count = await crud_price_cache.cleanup_old_cache_entries(
-        db=db, max_age_days=0
-    )
+    cleared_count = await crud_price_cache.clear_price_cache(db=db)
     return {"message": f"Cleared {cleared_count} cached price entries"}
 
 

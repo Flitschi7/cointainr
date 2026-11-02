@@ -564,15 +564,15 @@ async def test_refresh_all_reports_error_without_cache(client):
 # --- Cache clearing ---
 
 
-async def test_clearing_price_cache_keeps_recent_entries(client):
-    """Current behavior: the optimized cleanup ignores max_age_days=0 and
-    uses PRICE_CACHE_CLEANUP_DAYS, so only entries older than that go."""
+async def test_clearing_price_cache_removes_every_price_entry(client):
     old = timedelta(days=settings.PRICE_CACHE_CLEANUP_DAYS + 1)
     await cache_price("AAPL", "stock", 100.0, age=timedelta(minutes=1))
     await cache_price("BTC", "crypto", 1.0, age=old)
+    await cache_rate("USD", "EUR", 0.9, age=timedelta(days=400))
 
     response = await client.delete(f"{PRICE}/cache")
 
     assert response.status_code == 200
-    assert response.json() == {"message": "Cleared 1 cached price entries"}
-    assert await count(PriceCache) == 1
+    assert response.json() == {"message": "Cleared 2 cached price entries"}
+    assert await count(PriceCache) == 0
+    assert await count(ConversionCache) == 1
