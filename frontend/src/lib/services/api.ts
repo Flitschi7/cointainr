@@ -86,6 +86,43 @@ export async function getAssets(customFetch?: typeof fetch): Promise<Asset[]> {
 }
 
 /**
+ * Readable message for a failed request, such as a holding rule the server
+ * refused. Falls back to `fallback` when the body has nothing usable.
+ */
+export async function responseErrorMessage(response: Response, fallback: string): Promise<string> {
+	let body: unknown;
+	try {
+		body = await response.json();
+	} catch {
+		return fallback;
+	}
+	if (!body || typeof body !== 'object') return fallback;
+	const data = body as {
+		message?: unknown;
+		detail?: unknown;
+		details?: { validation_errors?: { loc?: unknown[]; msg?: string }[] };
+	};
+
+	const messages = (data.details?.validation_errors ?? [])
+		.map((error) => {
+			const msg = (error.msg ?? '').replace(/^Value error, /, '');
+			const field = error.loc?.length && error.loc.length > 1 ? String(error.loc.at(-1)) : '';
+			const named = field && !msg.toLowerCase().includes(field.replaceAll('_', ' '));
+			return named ? `${field.replaceAll('_', ' ')}: ${msg}` : msg;
+		})
+		.filter(Boolean);
+	if (messages.length) return capitalize(messages.join('; '));
+
+	if (typeof data.message === 'string' && data.message) return data.message;
+	if (typeof data.detail === 'string' && data.detail) return data.detail;
+	return fallback;
+}
+
+function capitalize(text: string): string {
+	return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
  * Create a new asset.
  */
 export async function createAsset(assetData: Omit<Asset, 'id'>): Promise<Asset> {
@@ -98,7 +135,7 @@ export async function createAsset(assetData: Omit<Asset, 'id'>): Promise<Asset> 
 		credentials: 'include'
 	});
 	if (!response.ok) {
-		throw new Error('Failed to create asset');
+		throw new Error(await responseErrorMessage(response, 'Failed to create asset'));
 	}
 	return await response.json();
 }
@@ -112,7 +149,7 @@ export async function deleteAsset(assetId: number): Promise<void> {
 		credentials: 'include'
 	});
 	if (!response.ok) {
-		throw new Error('Failed to delete asset');
+		throw new Error(await responseErrorMessage(response, 'Failed to delete asset'));
 	}
 }
 
@@ -132,7 +169,7 @@ export async function updateAsset(
 		credentials: 'include'
 	});
 	if (!response.ok) {
-		throw new Error('Failed to update asset');
+		throw new Error(await responseErrorMessage(response, 'Failed to update asset'));
 	}
 	return await response.json();
 }
