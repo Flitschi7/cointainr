@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -137,8 +138,7 @@ async def create_asset(
             # ISIN: 12 alphanumeric chars
             if len(identifier) == 12 and identifier.isalnum():
                 try:
-                    ticker = yf.Ticker(identifier)
-                    info = ticker.info
+                    info = await asyncio.to_thread(lambda: yf.Ticker(identifier).info)
                     assetname = (
                         info.get("shortName")
                         or info.get("longName")
@@ -149,7 +149,9 @@ async def create_asset(
             else:
                 # Try Finnhub symbol lookup
                 try:
-                    search_result = finnhub_client.symbol_lookup(identifier)
+                    search_result = await asyncio.to_thread(
+                        finnhub_client.symbol_lookup, identifier
+                    )
                     if search_result and search_result.get("count", 0) > 0:
                         assetname = search_result["result"][0].get("description")
                 except Exception:
@@ -157,8 +159,9 @@ async def create_asset(
                 # Fallback to Yahoo Finance
                 if not assetname:
                     try:
-                        ticker = yf.Ticker(identifier)
-                        info = ticker.info
+                        info = await asyncio.to_thread(
+                            lambda: yf.Ticker(identifier).info
+                        )
                         assetname = (
                             info.get("shortName")
                             or info.get("longName")
