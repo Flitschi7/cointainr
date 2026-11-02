@@ -15,6 +15,8 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.core.config import settings
+
 # Set up logger
 logger = logging.getLogger(__name__)
 
@@ -204,6 +206,10 @@ def format_error_response(
             details = error.details.copy()
             if not include_traceback and "traceback" in details:
                 del details["traceback"]
+            # Raw exception text can carry server paths, SQL and request input;
+            # outside development it only goes to the log (see log_error)
+            if settings.ENVIRONMENT != "development":
+                details.pop("original_error", None)
             response["details"] = details
     else:
         # Handle standard exceptions
