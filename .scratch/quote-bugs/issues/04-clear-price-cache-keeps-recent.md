@@ -1,6 +1,6 @@
 # "Clear price cache" keeps recent entries
 
-Status: needs-triage
+Status: ready-for-agent
 
 `DELETE /api/v1/price/cache` calls `cleanup_old_cache_entries(max_age_days=0)`,
 but the optimized implementation ignores the argument and deletes only entries

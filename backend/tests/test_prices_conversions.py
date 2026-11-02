@@ -193,11 +193,33 @@ async def test_stock_quote_falls_back_to_yahoo(client, yahoo):
     )
 
 
-async def test_stock_quote_of_zero_from_finnhub_skips_yahoo(client, finnhub, yahoo):
-    """Current behavior: a 0 quote is not None, so Yahoo is never tried; the
-    cache schema then rejects the missing currency (a ValueError, so 404)."""
+async def test_stock_quote_of_zero_from_finnhub_falls_back_to_yahoo(
+    client, finnhub, yahoo
+):
     finnhub.quotes = {"ZERO": 0}
     yahoo["ZERO"] = {"regularMarketPrice": 5.0, "currency": "USD"}
+
+    response = await client.get(f"{PRICE}/stock/ZERO")
+
+    assert response.status_code == 200
+    assert (response.json()["price"], response.json()["source"]) == (5.0, "yfinance")
+
+
+async def test_isin_quote_of_zero_from_finnhub_falls_back_to_yahoo(
+    client, finnhub, yahoo
+):
+    finnhub.lookups = {"US0000000001": "ZERO"}
+    finnhub.quotes = {"ZERO": 0}
+    yahoo["US0000000001"] = {"regularMarketPrice": 5.0, "currency": "USD"}
+
+    response = await client.get(f"{PRICE}/stock/US0000000001")
+
+    assert response.status_code == 200
+    assert response.json()["source"] == "yfinance"
+
+
+async def test_stock_quote_of_zero_everywhere_is_404(client, finnhub, yahoo):
+    finnhub.quotes = {"ZERO": 0}
 
     response = await client.get(f"{PRICE}/stock/ZERO")
 
@@ -205,9 +227,7 @@ async def test_stock_quote_of_zero_from_finnhub_skips_yahoo(client, finnhub, yah
     assert await count(PriceCache) == 0
 
 
-async def test_stock_isin_resolves_symbol_but_caches_under_symbol(client, finnhub):
-    """Current behavior: the quote is cached under the resolved symbol, so a
-    repeated ISIN request misses the cache and calls Finnhub again."""
+async def test_repeated_isin_quote_comes_from_cache(client, finnhub):
     finnhub.lookups = {"US0378331005": "AAPL"}
     finnhub.quotes = {"AAPL": 190.0}
 
@@ -215,8 +235,8 @@ async def test_stock_isin_resolves_symbol_but_caches_under_symbol(client, finnhu
     second = (await client.get(f"{PRICE}/stock/US0378331005")).json()
 
     assert first["symbol"] == "AAPL"
-    assert second["cached"] is False
-    assert finnhub.calls.count(("quote", "AAPL")) == 2
+    assert (second["price"], second["cached"]) == (190.0, True)
+    assert finnhub.calls.count(("quote", "AAPL")) == 1
 
 
 async def test_fresh_stock_cache_is_used_without_provider_calls(client, finnhub):
@@ -412,14 +432,28 @@ async def test_expired_rate_is_refreshed(client, http):
     assert body["cached"] is False
 
 
-async def test_expired_rate_is_not_served_when_api_fails(client):
-    """Current behavior: the service raises ValueError on API failure and the
-    endpoint maps it to 404 before its expired-cache fallback runs."""
+async def test_expired_rate_is_served_when_api_fails(client):
     await cache_rate("USD", "EUR", 0.9, age=STALE_RATE)
 
     response = await client.get(f"{PRICE}/rate/USD/EUR")
 
-    assert response.status_code == 404
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rate"] == 0.9
+    assert body["cached"] is True
+    assert body["cache_status"]["using_expired_cache"] is True
+
+
+async def test_expired_rate_converts_when_api_fails(client):
+    await cache_rate("USD", "EUR", 0.9, age=STALE_RATE)
+
+    response = await client.get(
+        f"{PRICE}/convert",
+        params={"from_currency": "USD", "to_currency": "EUR", "amount": 10},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["converted"] == pytest.approx(9.0)
 
 
 @pytest.mark.parametrize(
@@ -530,15 +564,15 @@ async def test_refresh_all_reports_error_without_cache(client):
 # --- Cache clearing ---
 
 
-async def test_clearing_price_cache_keeps_recent_entries(client):
-    """Current behavior: the optimized cleanup ignores max_age_days=0 and
-    uses PRICE_CACHE_CLEANUP_DAYS, so only entries older than that go."""
+async def test_clearing_price_cache_removes_every_price_entry(client):
     old = timedelta(days=settings.PRICE_CACHE_CLEANUP_DAYS + 1)
     await cache_price("AAPL", "stock", 100.0, age=timedelta(minutes=1))
     await cache_price("BTC", "crypto", 1.0, age=old)
+    await cache_rate("USD", "EUR", 0.9, age=timedelta(days=400))
 
     response = await client.delete(f"{PRICE}/cache")
 
     assert response.status_code == 200
-    assert response.json() == {"message": "Cleared 1 cached price entries"}
-    assert await count(PriceCache) == 1
+    assert response.json() == {"message": "Cleared 2 cached price entries"}
+    assert await count(PriceCache) == 0
+    assert await count(ConversionCache) == 1

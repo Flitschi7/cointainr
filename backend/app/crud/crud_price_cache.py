@@ -167,6 +167,20 @@ async def get_cached_prices_batch(
         return cache_dict
 
 
+async def clear_price_cache(db: AsyncSession) -> int:
+    """
+    Remove every price cache entry, whatever its age. Conversion rates stay.
+
+    Returns:
+        int - number of entries removed
+    """
+    from sqlalchemy import delete
+
+    result = await db.execute(delete(PriceCache))
+    await db.commit()
+    return result.rowcount or 0
+
+
 async def cleanup_old_cache_entries(db: AsyncSession, max_age_days: int = 30):
     """
     Remove cache entries older than specified days.

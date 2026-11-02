@@ -192,7 +192,17 @@ async def convert_currency(
         )
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        # The rate API failed: serve an expired cached rate if there is one
+        try:
+            return await conversion_service.convert_amount(
+                db=db,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                amount=float(amount),
+                allow_expired=True,
+            )
+        except Exception:
+            raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         # Enhanced error handling for cache-related failures
         error_message = str(e)
@@ -248,7 +258,16 @@ async def get_conversion_rate(
         )
         return result
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        # The rate API failed: serve an expired cached rate if there is one
+        try:
+            return await conversion_service.get_conversion_rate(
+                db=db,
+                from_currency=from_currency,
+                to_currency=to_currency,
+                allow_expired=True,
+            )
+        except Exception:
+            raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         # Enhanced error handling for cache-related failures
         error_message = str(e)
@@ -480,9 +499,7 @@ async def clear_price_cache(db: AsyncSession = db_dep):
     """
     from app.crud import crud_price_cache
 
-    cleared_count = await crud_price_cache.cleanup_old_cache_entries(
-        db=db, max_age_days=0
-    )
+    cleared_count = await crud_price_cache.clear_price_cache(db=db)
     return {"message": f"Cleared {cleared_count} cached price entries"}
 
 

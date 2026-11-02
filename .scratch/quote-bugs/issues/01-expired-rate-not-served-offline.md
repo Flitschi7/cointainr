@@ -1,6 +1,6 @@
 # Expired conversion rate is not served when the rate API fails
 
-Status: needs-triage
+Status: ready-for-agent
 
 `ConversionService.get_conversion_rate` wraps every API failure in
 `ValueError`. The `/api/v1/price/rate` and `/convert` endpoints map

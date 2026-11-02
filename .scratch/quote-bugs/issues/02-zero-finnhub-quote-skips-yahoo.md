@@ -1,6 +1,6 @@
 # Finnhub quote of 0 skips the Yahoo fallback and fails
 
-Status: needs-triage
+Status: ready-for-agent
 
 `PriceService.get_stock_price` falls back to Yahoo only when the Finnhub
 price is `None`. Finnhub returns `c: 0` for unknown symbols, so Yahoo is never
