@@ -1,4 +1,5 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
+from app.core.holding_rules import holding_violations
 from app.models.asset import AssetType
 from typing import Optional
 
@@ -24,10 +25,15 @@ class AssetBase(BaseModel):
 class AssetCreate(AssetBase):
     """
     Properties required to create an Asset.
-    Inherits all fields from AssetBase.
+    Inherits all fields from AssetBase and enforces the holding rules.
     """
 
-    pass
+    @model_validator(mode="after")
+    def check_holding_rules(self) -> "AssetCreate":
+        violations = holding_violations(self.type, self.quantity, self.purchase_price)
+        if violations:
+            raise ValueError("; ".join(message for _, message in violations))
+        return self
 
 
 # --- Asset Read Schema ---

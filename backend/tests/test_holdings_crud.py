@@ -1,9 +1,9 @@
 """
 Holdings CRUD through the HTTP API, pinned to current behavior.
 
-These tests describe what /api/v1/assets does today, including the absence of
-value validation (item 10 adds rules). Name lookups go to fakes; no test may
-reach a real provider.
+These tests describe what /api/v1/assets does today; holding value rules are
+in test_holding_validation.py. Name lookups go to fakes; no test may reach a
+real provider.
 """
 
 import httpx
@@ -211,23 +211,6 @@ async def test_create_rejects_malformed_payload(client, fields):
 
     assert response.status_code == 422
     assert (await client.get(ASSETS)).json() == []
-
-
-@pytest.mark.parametrize(
-    "fields",
-    [
-        {"type": "cash", "name": "Bank", "quantity": -50.0},
-        {"type": "cash", "name": "Bank", "quantity": 0},
-        {"type": "stock", "name": "", "quantity": -1, "purchase_price": -5},
-        {"type": "crypto", "name": "Wallet", "quantity": 1, "purchase_price": 0},
-    ],
-    ids=["negative-cash", "zero-quantity", "negative-stock", "free-acquisition"],
-)
-async def test_create_accepts_values_without_range_checks(client, fields):
-    """Current behavior: no value rules yet (item 10 adds them)."""
-    body = await create(client, **fields)
-
-    assert body["quantity"] == fields["quantity"]
 
 
 # --- Read ---

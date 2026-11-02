@@ -38,7 +38,8 @@ reverse are in [docs/adr/](../../docs/adr/).
 - Holding rules, enforced on create and update only:
   - quantity may be 0;
   - quantity may be negative only for cash (no short holdings);
-  - purchase price may be 0 (free acquisition);
+  - purchase price may be 0 (free acquisition) but not negative (it is a
+    cost per unit);
   - `NaN` and `Infinity` are always rejected.
 - Existing rows that break these rules still load and display. A read-only check
   lists violations so they can be fixed by editing.
