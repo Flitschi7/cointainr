@@ -14,7 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.services.auth_service import auth_service
-from app.db.session import SessionLocal
+from app.db.database import session_scope
 from app.core.auth_config import auth_settings
 
 # Set up logger
@@ -109,7 +109,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Validate session token
         try:
-            async with SessionLocal() as db:
+            async with session_scope() as db:
                 is_valid = await auth_service.validate_session(db, session_token)
 
                 if not is_valid:

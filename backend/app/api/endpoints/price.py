@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import finnhub
 import yfinance as yf
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.db.database import get_db
 from app.services.price_service import price_service
 from app.services.conversion_service import conversion_service
 from app.services.cache_management import cache_management_service
@@ -12,20 +12,7 @@ from datetime import datetime, timedelta
 router = APIRouter()
 
 
-# Database dependency
-def get_db_dependency():
-    """
-    Dependency provider for async DB session.
-    """
-
-    async def _get_db():
-        async with SessionLocal() as session:
-            yield session
-
-    return Depends(_get_db)
-
-
-db_dep = get_db_dependency()
+db_dep = Depends(get_db)
 
 # Finnhub client initialization (for backward compatibility)
 if not hasattr(settings, "FINNHUB_API_KEY") or not settings.FINNHUB_API_KEY:
