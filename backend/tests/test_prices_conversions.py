@@ -412,14 +412,28 @@ async def test_expired_rate_is_refreshed(client, http):
     assert body["cached"] is False
 
 
-async def test_expired_rate_is_not_served_when_api_fails(client):
-    """Current behavior: the service raises ValueError on API failure and the
-    endpoint maps it to 404 before its expired-cache fallback runs."""
+async def test_expired_rate_is_served_when_api_fails(client):
     await cache_rate("USD", "EUR", 0.9, age=STALE_RATE)
 
     response = await client.get(f"{PRICE}/rate/USD/EUR")
 
-    assert response.status_code == 404
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rate"] == 0.9
+    assert body["cached"] is True
+    assert body["cache_status"]["using_expired_cache"] is True
+
+
+async def test_expired_rate_converts_when_api_fails(client):
+    await cache_rate("USD", "EUR", 0.9, age=STALE_RATE)
+
+    response = await client.get(
+        f"{PRICE}/convert",
+        params={"from_currency": "USD", "to_currency": "EUR", "amount": 10},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["converted"] == pytest.approx(9.0)
 
 
 @pytest.mark.parametrize(
