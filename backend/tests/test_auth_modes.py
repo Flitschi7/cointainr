@@ -6,6 +6,7 @@ The middleware is installed when `create_app()` runs and reads the shared
 a fresh app. Credentials here are test values only.
 """
 
+import secrets
 from datetime import datetime, timedelta
 
 import httpx
@@ -20,6 +21,7 @@ from app.models.asset import Asset, AssetType
 from app.models.conversion_cache import ConversionCache
 from app.models.price_cache import PriceCache
 from app.models.session import Session as AuthSession
+from app.services.auth_service import auth_service
 from app.services.demo_service import demo_service
 
 ASSETS = "/api/v1/assets/"
@@ -106,6 +108,43 @@ def test_demo_mode_overrides_configured_credentials(monkeypatch):
     settings = AuthSettings()
 
     assert (settings.AUTH_USER, settings.AUTH_PASSWORD) == ("demo", "demo1")
+
+
+@pytest.mark.parametrize(
+    "username, password, valid",
+    [
+        (USER, PASSWORD, True),
+        (USER, "wrong", False),
+        ("someone", PASSWORD, False),
+        (USER, "", False),
+        ("", "", False),
+        (USER, "pässwört", False),
+    ],
+    ids=["valid", "wrong-password", "wrong-user", "empty-password", "empty", "non-ascii"],
+)
+async def test_credentials_are_checked(monkeypatch, username, password, valid):
+    set_mode(monkeypatch, "on")
+
+    assert await auth_service.validate_credentials(username, password) is valid
+
+
+async def test_credentials_are_compared_in_constant_time(monkeypatch):
+    set_mode(monkeypatch, "on")
+    compared = []
+    real = secrets.compare_digest
+
+    def spy(a, b):
+        compared.append((a, b))
+        return real(a, b)
+
+    monkeypatch.setattr(secrets, "compare_digest", spy)
+
+    await auth_service.validate_credentials("someone", "wrong")
+
+    assert compared == [
+        (b"someone", USER.encode()),
+        (b"wrong", PASSWORD.encode()),
+    ]
 
 
 # --- Auth off ---

@@ -48,11 +48,15 @@ class AuthService:
                 )
                 return False
 
-            # Validate against configured credentials
-            is_valid = (
-                username == self.settings.AUTH_USER
-                and password == self.settings.AUTH_PASSWORD
+            # Validate against configured credentials in constant time; both
+            # values are always compared so a wrong username takes the same path
+            user_ok = secrets.compare_digest(
+                username.encode(), self.settings.AUTH_USER.encode()
             )
+            password_ok = secrets.compare_digest(
+                password.encode(), self.settings.AUTH_PASSWORD.encode()
+            )
+            is_valid = user_ok and password_ok
 
             if is_valid:
                 logger.info(f"Successful authentication for user: {username}")
