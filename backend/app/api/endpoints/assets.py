@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
+from app.core.holding_rules import holding_violations
 from app.crud import crud_asset
 from app.models import asset as asset_model
 from app.schemas import asset as asset_schema
@@ -219,6 +221,20 @@ async def update_asset(
     if not asset:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found"
+        )
+    # Holding rules apply to the holding as it will be after the update
+    changes = asset_in.model_dump(exclude_unset=True)
+    violations = holding_violations(
+        changes.get("type", asset.type),
+        changes.get("quantity", asset.quantity),
+        changes.get("purchase_price", asset.purchase_price),
+    )
+    if violations:
+        raise RequestValidationError(
+            [
+                {"type": "value_error", "loc": ("body", field), "msg": message}
+                for field, message in violations
+            ]
         )
     updated_asset = await crud_asset.update_asset(
         db=db, db_asset=asset, asset_in=asset_in
