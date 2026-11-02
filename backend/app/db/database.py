@@ -1,30 +1,30 @@
 """
 Database utilities for the application.
 
-This module provides utilities for working with the database,
-including dependency injection for database sessions.
+This module owns database sessions: `get_db` for request handlers and
+`session_scope` for work outside a request (middleware, background tasks).
+Nothing outside `app/db/` should create sessions from `SessionLocal`.
 """
 
-from typing import AsyncGenerator
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator, AsyncIterator
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionLocal
 
-# Use the default session maker from session.py
-_current_session_maker = SessionLocal
 
-
-def set_session_maker(session_maker: async_sessionmaker) -> None:
+@asynccontextmanager
+async def session_scope() -> AsyncIterator[AsyncSession]:
     """
-    Set a custom session maker for the application.
+    Open a database session outside a request.
 
-    This allows replacing the default session maker with an optimized one.
+    The caller commits its own work; the session is closed on exit.
 
-    Args:
-        session_maker: The new session maker to use
+    Yields:
+        AsyncSession: A SQLAlchemy async session
     """
-    global _current_session_maker
-    _current_session_maker = session_maker
+    async with SessionLocal() as session:
+        yield session
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -32,12 +32,13 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     Get a database session as a dependency.
 
     This function is used as a FastAPI dependency to provide
-    database sessions to endpoint functions.
+    database sessions to endpoint functions. Pending changes are
+    committed after the handler returns and rolled back if it raises.
 
     Yields:
         AsyncSession: A SQLAlchemy async session
     """
-    async with _current_session_maker() as session:
+    async with session_scope() as session:
         try:
             yield session
             await session.commit()

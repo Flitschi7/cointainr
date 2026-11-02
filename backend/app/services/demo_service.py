@@ -5,7 +5,7 @@ from typing import Optional
 from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import SessionLocal
+from app.db.database import session_scope
 from app.models.asset import Asset
 from app.models.conversion_cache import ConversionCache
 from app.models.price_cache import PriceCache
@@ -165,7 +165,7 @@ class DemoService:
             return False
 
         try:
-            async with SessionLocal() as db:
+            async with session_scope() as db:
                 # Start transaction
                 async with db.begin():
                     # Clean up sessions (except current ones might be needed)
@@ -286,7 +286,7 @@ class DemoService:
             return
 
         try:
-            async with SessionLocal() as db:
+            async with session_scope() as db:
                 # Check if the preserved asset exists
                 result = await db.execute(
                     select(Asset).where(Asset.id == self.preserve_asset_id)

@@ -4,26 +4,13 @@ from typing import List
 from app.crud import crud_asset
 from app.models import asset as asset_model
 from app.schemas import asset as asset_schema
-from app.db.session import SessionLocal
+from app.db.database import get_db
 from app.services.onvista_service import onvista_service
 
 router = APIRouter()
 
 
-def get_db_dependency():
-    """
-    Dependency provider for async DB session.
-    Yields an AsyncSession instance.
-    """
-
-    async def _get_db():
-        async with SessionLocal() as session:
-            yield session
-
-    return Depends(_get_db)
-
-
-db_dep = get_db_dependency()
+db_dep = Depends(get_db)
 
 
 # --- Asset Endpoints ---

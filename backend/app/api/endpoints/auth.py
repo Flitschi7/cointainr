@@ -11,7 +11,7 @@ from app.schemas.auth import (
     AuthErrorResponse,
 )
 from app.services.auth_service import auth_service
-from app.db.session import SessionLocal
+from app.db.database import get_db
 from app.core.auth_config import auth_settings
 
 logger = logging.getLogger(__name__)
@@ -19,20 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def get_db_dependency():
-    """
-    Dependency provider for async DB session.
-    Yields an AsyncSession instance.
-    """
-
-    async def _get_db():
-        async with SessionLocal() as session:
-            yield session
-
-    return Depends(_get_db)
-
-
-db_dep = get_db_dependency()
+db_dep = Depends(get_db)
 
 
 def get_session_token_from_request(request: Request) -> Optional[str]:
